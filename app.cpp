@@ -60,8 +60,8 @@
 using namespace std;
 using namespace std::chrono;
 
-const std::string DFLT_SERVER_ADDRESS("localhost:1883");
-const std::string CLIENT_ID("iot");
+const std::string DFLT_SERVER_ADDRESS("tcp://localhost:1883");
+const std::string CLIENT_ID("multithr_pub_sub_cpp");
 
 /////////////////////////////////////////////////////////////////////////////
 
