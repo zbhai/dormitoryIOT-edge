@@ -1,0 +1,12 @@
+# ignore the executable file
+app
+
+# ignore all files in the build directory
+build/
+
+# ignore all temporary files
+CMakeFiles
+*.cmake
+*.cmake.in
+CMakeCache.txt
+Makefile
