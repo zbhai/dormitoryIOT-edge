@@ -3,6 +3,14 @@
 
 #include "pthread.h"
 #include "mqtt/async_client.h"
+#include <list>
+
+const std::string SERVER_ADDRESS	{ "localhost:1883" };
+const std::string CLIENT_ID		{ "dormitoryIOT" };
+const std::string TOPIC 			{ "dormitoryIOT/test" };
+const std::string REC_DEVICE_TOPIC {"$ke/events/device/+/data/update"};
+const std::string SEN_DEVICE_TOPIC {"$hw/events/device/+/twin/update/delta"};
+const std::string SEN_CLOUD_TOPIC {"SYS/dis/upload_records"};
 
 
 class message
@@ -92,8 +100,8 @@ class device
 
     public:
     device(std::string device_name, std::string device_id) : device_name(device_name), device_id(device_id) {}
-    std::string device_name() const { return device_name; }
-    std::string device_id() const { return device_id; }
+    std::string get_name() const { return device_name; }
+    std::string get_id() const { return device_id; }
     virtual bool synced() = 0;
 };
 
@@ -105,11 +113,11 @@ class led : public device
 
     public:
     led(std::string device_name, std::string device_id, std::string status, uint8_t pin_number) : device(device_name, device_id), status(status), pin_number(pin_number) {}
-    std::string cur_status() const { return status; }
-    void desired_status(std::string desired) const; // create a task and be executed later
+    std::string get_status() const { return status; }
+    void set_desired_status(std::string desired) const; // create a task and be executed later
     bool synced() { return status == desired_status; }
 };
-inline void led::desired_status(std::string desired) const
+inline void led::set_desired_status(std::string desired) const
 {
     // create a message and push to the message queue
     // the message will be send to the device
@@ -125,8 +133,8 @@ class dth11 : public device
 
     public:
     dth11(std::string device_name, std::string device_id, uint8_t temperature, uint8_t humidity) : device(device_name, device_id), temperature(temperature), humidity(humidity) {}
-    uint8_t device_temperature() const { return temperature; }
-    uint8_t device_humidity() const { return humidity; }
+    uint8_t get_temporary() const { return temperature; }
+    uint8_t get_humidity() const { return humidity; }
     bool synced() { return true; }
 };
 
@@ -138,52 +146,48 @@ class mq2 : public device
 
     public:
     mq2(std::string device_name, std::string device_id, uint8_t smoke_value, std::string alarm_status) : device(device_name, device_id), smoke_value(smoke_value), alarm_status(alarm_status) {}
-    uint8_t device_smoke_value() const { return smoke_value; }
-    std::string cur_alarm_status() const { return alarm_status; }
-    void desired_alarm_status(std::string desired) const { return ; } // create a task and be executed later
+    uint8_t get_smoke_value() const { return smoke_value; }
+    std::string get_alarm_status() const { return alarm_status; }
+    void set_desired_alarm_status(std::string desired) const { return ; } // create a task and be executed later
     bool synced() { return alarm_status == desired_alarm_status; }
 };
 
-class system
+class systemIOT
 {
     bool is_basic_system;
     std::string system_name;
     std::string system_id;
     list<device *> devices;
-    list<system *> subsystems;
-    list<system *> related_systems;
+    list<systemIOT *> subsystems;
+    list<systemIOT *> related_systems;
 
     public:
-    system(std::string system_name, std::string system_id, bool is_basic_system) : system_name(system_name), system_id(system_id), is_basic_system(is_basic_system) {}
-    std::string system_name() const { return system_name; }
-    std::string system_id() const { return system_id; }
-    bool is_basic_system() const { return is_basic_system; }
-    list<device *> devices() const { return devices; }
-    list<system *> subsystems() const { return subsystems; }
-    list<system *> related_systems() const { return related_systems; }
+    systemIOT(std::string system_name, std::string system_id, bool is_basic_system) : system_name(system_name), system_id(system_id), is_basic_system(is_basic_system) {}
+    std::string get_name() const { return system_name; }
+    std::string get_id() const { return system_id; }
+    bool is_basic() const { return is_basic_system; }
+    list<device *> get_devices() const { return devices; }
+    list<systemIOT *> get_subsystems() const { return subsystems; }
+    list<systemIOT *> get_related_systems() const { return related_systems; }
     void add_device(device *d) { devices.push_back(d); }
-    void add_subsystem(system *s) { subsystems.push_back(s); }
-    void add_related_system(system *s) { related_systems.push_back(s); }
+    void add_subsystem(systemIOT *s) { subsystems.push_back(s); }
+    void add_related_system(systemIOT *s) { related_systems.push_back(s); }
 
     private:
-    virtual void control_panel() = 0; // control the system
+    virtual void control_panel() {}; // control the system
 };
 
-class lighting : public system
-{
-    map<std::string, list<device>> groups;
-    
-    public:
-    lighting(std::string system_name, std::string system_id, bool is_basic_system) : system(system_name, system_id, is_basic_system) {}
-    map<std::string, list<device>> groups() const { return groups; }
+class lighting : public systemIOT
+{   
+    map<std::string, list<device*>> lighting_groups;
+
+    public:    
+    lighting(std::string system_name, std::string system_id, bool is_basic_system) : systemIOT(system_name, system_id, is_basic_system) {}
+    map<std::string, list<device*>> get_groups() const { return lighting_groups; }
 
     private:
-    void control_panel(); // control the lighting system
-
-};
-
-inline void lighting::control_panel()
-{
+    inline void control_panel()
+    {
     // turn on/off the light based on the time
     auto origin_time = std::time(nullptr);
     auto local_time = std::localtime(&origin_time);
@@ -191,32 +195,36 @@ inline void lighting::control_panel()
     auto minute = local_time->tm_min;  // int
     
     // the time control panel is based on groups
-    auto iter = groups.find("dormitory");
+    auto iter = lighting_groups.find("dormitory");
     auto devices = iter->second;
     for (auto device : devices)
     {
         if (hour >= 23 || hour <= 6)
         {
             // turn on the light
-            device->desired_status = "on";
+            led *lighting = dynamic_cast<led *>(device);
+            lighting->set_desired_status("on");
         }
         else
         {
             // turn off the light
-            device->desired_status = "off";
+            led *lighting = dynamic_cast<led *>(device);
+            lighting->set_desired_status("off");
         }
     }
 
     // turn on/off the light based on the motion sensor
     // now the motion sensor is empty
-}
+    }
+};
 
-class security : public system
+
+class security : public systemIOT
 {
     std::string security_status;
     
     public:
-    security(std::string system_name, std::string system_id, bool is_basic_system) : system(system_name, system_id, is_basic_system) {}
+    security(std::string system_name, std::string system_id, bool is_basic_system) : systemIOT(system_name, system_id, is_basic_system) {}
     std::string security_status() const { return security_status; }
 
     private:
@@ -232,28 +240,33 @@ class region
 {
     std::string region_name;
     std::string region_id;
-    list<system *> systems;
+    list<systemIOT *> systems;
 
     public:
     region(std::string region_name, std::string region_id) : region_name(region_name), region_id(region_id) {}
     std::string region_name() const { return region_name; }
     std::string region_id() const { return region_id; }
-    list<system *> systems() const { return systems; }
-    void add_system(system *s) { systems.push_back(s); }
-    void delete_system(system *s) { systems.remove(s); }
+    list<systemIOT *> systems() const { return systems; }
+    void add_system(systemIOT *s) { systems.push_back(s); }
+    void delete_system(systemIOT *s) { systems.remove(s); }
 };
 
 class dormitoryIOT : public region
 {
+    message_queue pub_topics;
+    message_queue sub_topics;
+
     public:
-    dormitoryIOT(std::string region_name, std::string region_id) : region(region_name, region_id) {};
+    dormitoryIOT(std::string region_name, std::string region_id, int pub_size, int sub_size) : region(region_name, region_id), pub_topics(pub_size), sub_topics(sub_size) {}
     void handle_message(message& m);
+    void push_message(std::string data, std::string topic) { pub_topics.push(data, topic); }
+    message pop_message() { return pub_topics.pop(); }
+    void handle_message();
 };
 
-inline void dormitoryIOT::handle_message(message& m)
+inline void dormitoryIOT::handle_message()
 {
-    // handle the message
-    // now, the handle_message is empty
+    return ;
 }
 
 #endif

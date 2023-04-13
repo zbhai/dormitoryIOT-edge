@@ -26,20 +26,8 @@
 
 using namespace std;
 
-const string SERVER_ADDRESS	{ "localhost:1883" };
-const string CLIENT_ID		{ "dormitoryIOT" };
-const string TOPIC 			{ "dormitoryIOT/test" };
-const string REC_DEVICE_TOPIC {"$ke/events/device/+/data/update"};
-const string SEN_DEVICE_TOPIC {"$hw/events/device/+/twin/update/delta"};
-const string SEN_CLOUD_TOPIC {"SYS/dis/upload_records"};
-
 const int  QOS = 1;
 
-// create sub topics message queue
-message_queue sub_topics(100);
-
-// create publish topics message queue
-message_queue pub_topics(100);
 
 void *data_center_thread(void *arg);
 void *publish_thread(void *arg);
@@ -200,5 +188,5 @@ void *region_thread(void *arg)
         // handle the message
         dormitory.handle_message(m);
     }
-
 }
+
