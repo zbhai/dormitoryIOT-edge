@@ -32,11 +32,9 @@ const int QOS = 1;
 
 void *mqtt_thread(void *arg) {
 
-  spdlog::debug("start the mqtt thread");
+  spdlog::debug("mqtt thread is running");
   // get dormitory
   auto dormitory = (dormitoryIOT *)arg;
-
-  spdlog::debug("start to create the mqtt client");
 
   // create the mqtt client
   mqtt::async_client cli(SERVER_ADDRESS, CLIENT_ID);
@@ -50,8 +48,6 @@ void *mqtt_thread(void *arg) {
     cli.start_consuming();
 
     // Connect to the server
-
-    spdlog::debug("connecting to the mqtt server");
     auto tok = cli.connect(connOpts);
 
     // Getting the connect response will block waiting for the
@@ -64,13 +60,9 @@ void *mqtt_thread(void *arg) {
     if (!rsp.is_session_present())
       cli.subscribe(TOPIC, QOS)->wait();
 
-    spdlog::debug("connected to the mqtt server");
-
     // Consume messages
     // This just exits if the client is disconnected.
     // (See some other examples for auto or manual reconnect)
-
-    spdlog::debug("start to consume the message");
 
     while (true) {
       auto msg = cli.consume_message();
@@ -79,7 +71,6 @@ void *mqtt_thread(void *arg) {
       // add the message to the sub_topics queue
       std::string data = static_cast<std::string>(msg->get_payload());
       std::string topic = static_cast<std::string>(msg->get_topic());
-      spdlog::debug("message topic: {}, message data: {}", topic, data);
       dormitory->push_message(data, topic);
       // debug the message information
     }
@@ -112,7 +103,6 @@ int main(int argc, char *argv[]) {
   spdlog::set_level(spdlog::level::debug);
   spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [thread %t] [%l] %v");
   // log the information
-  spdlog::debug("start the mqtt client");
 
   // create the region
   dormitoryIOT dormitory("dormitory614", "dormitory614_id", 100, 100);
@@ -123,8 +113,6 @@ int main(int argc, char *argv[]) {
   led led1("led1", "led1_id", "off", 0);
   dth11 dth11_1("dth11_1", "dth11_1_id", 0, 0);
   mq2 mq2_1("mq2_1", "mq2_1_id", 0, "o");
-
-  spdlog::debug("completely the creating of the region");
 
   // add the devices to the systems
   lighting_led.add_device(&led1);

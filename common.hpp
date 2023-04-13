@@ -47,6 +47,7 @@ public:
       messages.push_back(message(data, topic));
       pthread_mutex_unlock(&mutex);
       length++;
+      spdlog::debug("push message to queue: {} {} {}", data, topic, length);
       return 0;
     }
     return -1;
@@ -59,6 +60,8 @@ public:
     messages.pop_front();
     pthread_mutex_unlock(&mutex);
     length--;
+    spdlog::debug("pop message from queue: {} {} {}", m.get_data(),
+                  m.get_topic(), length);
     return m;
   }
   bool empty() { return messages.empty(); }
@@ -121,9 +124,9 @@ public:
       : region(region_name, region_id), pub_topics(pub_size),
         sub_topics(sub_size), security_topics(sub_size / 2) {}
   void push_message(std::string data, std::string topic) {
-    pub_topics.push(data, topic);
+    sub_topics.push(data, topic);
   }
-  message pop_message() { return pub_topics.pop(); }
+  message pop_message() { return sub_topics.pop(); }
   bool has_security_update() const { return get_security_update(); }
   message pop_security_message() { return security_topics.pop(); }
   void push_security_message(std::string data, std::string topic) {
@@ -305,16 +308,18 @@ void *handle_message_thread(void *arg) {
 
   while (true) {
     if (!pub_topics.empty()) {
+      spdlog::debug("handle message thread->pub topics is not empty");
       auto m = pub_topics.pop();
       auto topic = m.get_topic();
       auto data = m.get_data();
       // must publish to device
     }
     if (!sub_topics.empty()) {
+      spdlog::debug("handle message thread->sub topics is not empty");
       auto m = sub_topics.pop();
       auto topic = m.get_topic();
       auto data = m.get_data();
-      spdlog::debug("topic: {}, data: {}", topic, data);
+      spdlog::debug("handle message thread->topic: {}, data: {}", topic, data);
     }
     sleep(1);
   }
