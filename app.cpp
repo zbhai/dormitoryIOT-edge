@@ -35,11 +35,8 @@ void *publish_thread(void *arg);
 
 void *mqtt_thread(void *arg) {
 
-  // setting the log
-  spdlog::set_level(spdlog::level::debug);
-  spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [thread %t] [%l] %v");
-  // log the information
-  spdlog::debug("start the mqtt client");
+  // get dormitory
+  auto dormitory = (dormitoryIOT *)arg;
 
   // create the thread to handle the message
   pthread_t data_center_thread_id;
@@ -90,7 +87,7 @@ void *mqtt_thread(void *arg) {
       std::string data = static_cast<std::string>(msg->get_payload());
       std::string topic = static_cast<std::string>(msg->get_topic());
       spdlog::debug("message topic: {}, message data: {}", topic, data);
-      sub_topics.push(data, topic);
+      dormitory->push_message(data, topic);
       // debug the message information
     }
 
@@ -109,43 +106,23 @@ void *mqtt_thread(void *arg) {
     }
   } catch (const mqtt::exception &exc) {
     cerr << "\n  " << exc << endl;
-    return 1;
+    exit(-1);
   }
 
-  return 0;
-}
-
-// the thread handle the message from the sub_topics queue
-void *data_center_thread(void *arg) {
-  while (1) {
-    if (sub_topics.empty()) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      continue;
-    }
-    message m = sub_topics.pop();
-    std::string data = m.get_data();
-    std::string topic = m.get_topic();
-    cout << "data: " << data << endl;
-  }
-}
-
-void *publish_thread(void *arg) {
-  while (1) {
-    if (pub_topics.empty()) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      continue;
-    }
-    message m = pub_topics.pop();
-    std::string data = m.get_data();
-    std::string topic = m.get_topic();
-    cout << "data: " << data << endl;
-  }
+  exit(0);
 }
 
 // the thread create a reagion and handle the message from the reagion
 void *main_thread(void *arg) {
+
+  // setting the log
+  spdlog::set_level(spdlog::level::debug);
+  spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [thread %t] [%l] %v");
+  // log the information
+  spdlog::debug("start the mqtt client");
+
   // create the region
-  dormitoryIOT dormitory("dormitory614", "dormitory614_id");
+  dormitoryIOT dormitory("dormitory614", "dormitory614_id", 100, 100);
   // create systems belong to the region
   lighting lighting_led("led", "led_id", true);
   security security_smoke("smoke", "smoke_id", true);
@@ -166,17 +143,13 @@ void *main_thread(void *arg) {
   // create all threads for the region
   dormitory.region_thread(nullptr);
 
-  // receive message from the sub_topics queue and handle its
-  while (1) {
-    if (sub_topics.empty()) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(100));
-      continue;
-    }
-    message m = sub_topics.pop();
-    std::string data = m.get_data();
-    std::string topic = m.get_topic();
-    cout << "data: " << data << endl;
-    // handle the message
-    dormitory.handle_message(m);
+  // the main thread is not exit, because it create three thread belong to
+  // dormitory
+
+  // create the mqtt thread
+  pthread_t mqtt_thread_handler;
+  pthread_create(&mqtt_thread_handler, nullptr, mqtt_thread, &dormitory);
+
+  while (true) {
   }
 }

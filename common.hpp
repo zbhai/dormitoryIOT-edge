@@ -239,12 +239,11 @@ public:
   systemIOT *security_system;
   bool has_security_update;
 
-  region(std::string region_name, std::string region_id, bool security_update)
-      : region_name(region_name), region_id(region_id),
-        has_security_update(security_update) {}
+  region(std::string region_name, std::string region_id)
+      : region_name(region_name), region_id(region_id) {}
   std::string get_region_name() const { return region_name; }
   std::string get_region_id() const { return region_id; }
-  std::list<systemIOT *> systems() const { return systems; }
+  std::list<systemIOT *> get_systems() { return systems; }
   void add_system(systemIOT *s) { systems.push_back(s); }
   void delete_system(systemIOT *s) { systems.remove(s); }
   void set_security_system(systemIOT *s) { security_system = s; }
@@ -259,10 +258,9 @@ public:
   message_queue security_topics;
 
   dormitoryIOT(std::string region_name, std::string region_id, int pub_size,
-               int sub_size, bool security_update)
-      : region(region_name, region_id, security_update), pub_topics(pub_size),
+               int sub_size)
+      : region(region_name, region_id), pub_topics(pub_size),
         sub_topics(sub_size), security_topics(sub_size / 2) {}
-  void handle_message(message &m);
   void push_message(std::string data, std::string topic) {
     pub_topics.push(data, topic);
   }
@@ -272,25 +270,23 @@ public:
   void push_security_message(std::string data, std::string topic) {
     security_topics.push(data, topic);
   }
-  void region_thread(void *arg);
+  void region_thread(void *arg) {
+    // first, create a thread to handle the security system
+    dormitoryIOT *dormitory = (dormitoryIOT *)arg;
+    pthread_t security_thread_handler;
+    pthread_create(&security_thread_handler, NULL, security_thread, dormitory);
+
+    // second, create a thread to handle the message
+    pthread_t message_thread_handler;
+    pthread_create(&message_thread_handler, NULL, handle_message_thread,
+                   dormitory);
+
+    // fourth, create a thread to handle the control panel
+    pthread_t control_panel_thread_handler;
+    pthread_create(&control_panel_thread_handler, NULL, control_panel_thread,
+                   dormitory);
+  }
 };
-
-inline void region_thread(void *arg) {
-  // first, create a thread to handle the security system
-  dormitoryIOT *dormitory = (dormitoryIOT *)arg;
-  pthread_t security_thread_handler;
-  pthread_create(&security_thread_handler, NULL, security_thread, dormitory);
-
-  // second, create a thread to handle the message
-  pthread_t message_thread_handler;
-  pthread_create(&message_thread_handler, NULL, handle_message_thread,
-                 dormitory);
-
-  // fourth, create a thread to handle the control panel
-  pthread_t control_panel_thread_handler;
-  pthread_create(&control_panel_thread_handler, NULL, control_panel_thread,
-                 dormitory);
-}
 
 void *handle_message_thread(void *arg) {
 
@@ -342,7 +338,7 @@ void *control_panel_thread(void *arg) {
 
   while (true) {
     for (auto system : systems) {
-      system->control_panel(nullptr);
+      system->control_panel(dormitory);
     }
     usleep(100);
   }
