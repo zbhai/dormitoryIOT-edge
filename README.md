@@ -27,3 +27,18 @@
     // }
     // turn on/off the light based on the motion sensor
     // now the motion sensor is empty
+
+# project setup
+- region setup
+  - add general systems
+    - lighting system
+  - set security system
+- system setup
+  - lighting system
+    - add devices
+    - add groups
+- device setup
+  - led
+  - dth11
+  - mq2
+- mqtt setup

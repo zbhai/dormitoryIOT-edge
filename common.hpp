@@ -3,6 +3,7 @@
 
 #include "mqtt/async_client.h"
 #include "pthread.h"
+#include "spdlog/spdlog.h"
 #include <list>
 
 const std::string SERVER_ADDRESS{"localhost:1883"};
@@ -246,6 +247,9 @@ public:
   std::map<std::string, std::list<device *>> get_groups() const {
     return lighting_groups;
   }
+  void add_group(std::string group_name, std::list<device *> devices) {
+    lighting_groups[group_name] = devices;
+  }
   inline void control_panel(void *arg) {
     // get the dormitory
     auto dormitory = (dormitoryIOT *)arg;
@@ -256,24 +260,24 @@ public:
     auto hour = local_time->tm_hour;  // int
     auto minute = local_time->tm_min; // int
 
-    // // the time control panel is based on groups
-    // auto iter = lighting_groups.find("dormitory");
-    // auto devices = iter->second;
-    // for (auto device : devices) {
-    //   if (hour >= 23 || hour <= 6) {
-    //     // turn on the light
-    //     led *lighting = dynamic_cast<led *>(device);
-    //     auto m = lighting->set_desired_status("on");
-    //     dormitory->push_message(m.get_data(), m.get_topic());
-    //   } else {
-    //     // turn off the light
-    //     led *lighting = dynamic_cast<led *>(device);
-    //     auto m = lighting->set_desired_status("off");
-    //     dormitory->push_message(m.get_data(), m.get_topic());
-    //   }
-    // }
-    // turn on/off the light based on the motion sensor
-    // now the motion sensor is empty
+    // the time control panel is based on groups
+    auto iter = lighting_groups.find("dormitory");
+    auto devices = iter->second;
+    for (auto device : devices) {
+      if (hour >= 23 || hour <= 6) {
+        // turn on the light
+        led *lighting = dynamic_cast<led *>(device);
+        auto m = lighting->set_desired_status("on");
+        dormitory->push_message(m.get_data(), m.get_topic());
+      } else {
+        // turn off the light
+        led *lighting = dynamic_cast<led *>(device);
+        auto m = lighting->set_desired_status("off");
+        dormitory->push_message(m.get_data(), m.get_topic());
+      }
+    }
+    // turn on/off the light based on the motion sensor now the motion sensor
+    // is empty
   }
 };
 

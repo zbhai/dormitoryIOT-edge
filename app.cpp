@@ -136,6 +136,10 @@ int main(int argc, char *argv[]) {
   dormitory.add_system(&security_smoke);
   dormitory.set_security_system(&security_smoke);
 
+  // set the lighting system groups
+  auto devices = list<device *>{&led1};
+  lighting_led.add_group("dormitory", devices);
+
   // create all threads for the region
   dormitory.region_thread(&dormitory);
 
