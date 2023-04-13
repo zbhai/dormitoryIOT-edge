@@ -1,51 +1,16 @@
-// async_subscribe.cpp
+// async_consume.cpp
 //
 // This is a Paho MQTT C++ client, sample application.
 //
-// This application is an MQTT publisher/subscriber using the C++
-// asynchronous client interface, demonstrating how you can share a client
-// between multiple threads.
-//
-// The app will count the number of "data" messages arriving at the broker
-// and then emit "events" with updated counts. A data message is any on a
-// "data/#" topic, and counts are emitted on the "events/count" topic. It
-// emits an event count around once every ten data messages.
-//
-// Note that this is a fairly contrived example, and it could be done much
-// more easily in a single thread. It is meant to demonstrate how you can
-// share a client amonst threads if and when that's a proper thing to do.
-//
-// At this time, there is a single callback or consumer queue for all
-// incoming messages, so you would typically only have one thead receiving
-// messages, although it _could_ send messages to multiple threads for
-// processing, perhaps based on the topics. It could be common, however, to
-// want to have multiple threads for publishing.
+// This application is an MQTT consumer/subscriber using the C++
+// asynchronous client interface, employing the  to receive messages
+// and status updates.
 //
 // The sample demonstrates:
-//  - Creating a client and accessing it from a shared_ptr<>
-//  - Using one thread to receive incoming messages from the broker and
-//    another thread to publish messages to it.
 //  - Connecting to an MQTT server/broker.
 //  - Subscribing to a topic
-//  - Using the asynchronous consumer
-//  - Publishing messages.
+//  - Receiving messages through the synchronous queuing API
 //
-
-/*******************************************************************************
- * Copyright (c) 2020 Frank Pagliughi <fpagliughi@mindspring.com>
- *
- * All rights reserved. This program and the accompanying materials
- * are made available under the terms of the Eclipse Public License v1.0
- * and Eclipse Distribution License v1.0 which accompany this distribution.
- *
- * The Eclipse Public License is available at
- *    http://www.eclipse.org/legal/epl-v10.html
- * and the Eclipse Distribution License is available at
- *   http://www.eclipse.org/org/documents/edl-v10.php.
- *
- * Contributors:
- *    Frank Pagliughi - initial implementation and documentation
- *******************************************************************************/
 
 #include <iostream>
 #include <cstdlib>
@@ -54,159 +19,186 @@
 #include <cctype>
 #include <thread>
 #include <chrono>
-#include <memory>
 #include "mqtt/async_client.h"
+#include "spdlog/spdlog.h"
+
+#include "common.hpp"
 
 using namespace std;
-using namespace std::chrono;
 
-const std::string DFLT_SERVER_ADDRESS("tcp://localhost:1883");
-const std::string CLIENT_ID("multithr_pub_sub_cpp");
+const string SERVER_ADDRESS	{ "localhost:1883" };
+const string CLIENT_ID		{ "dormitoryIOT" };
+const string TOPIC 			{ "dormitoryIOT/test" };
+const string REC_DEVICE_TOPIC {"$ke/events/device/+/data/update"};
+const string SEN_DEVICE_TOPIC {"$hw/events/device/+/twin/update/delta"};
+const string SEN_CLOUD_TOPIC {"SYS/dis/upload_records"};
 
-/////////////////////////////////////////////////////////////////////////////
+const int  QOS = 1;
 
-/**
- * A thread-safe counter that can be used to occasionally signal a waiter on
- * every 10th increment.
- */
-class multithr_counter
-{
-	using guard = std::unique_lock<std::mutex>;
+// create sub topics message queue
+message_queue sub_topics(100);
 
-	size_t count_;
-	bool closed_;
-	mutable bool ready_;
-	mutable std::condition_variable cond_;
-	mutable std::mutex lock_;
+// create publish topics message queue
+message_queue pub_topics(100);
 
-public:
-	// Declare a pointer type for sharing a counter between threads
-	using ptr_t = std::shared_ptr<multithr_counter>;
-
-	// Create a new thread-safe counter with an initial count of zero.
-	multithr_counter() : count_(0), closed_(false), ready_(false) {}
-
-	// Determines if the counter has been closed.
-	bool closed() const {
-		guard g(lock_);
-		return closed_;
-	}
-
-	// Close the counter and signal all waiters.
-	void close() {
-		guard g(lock_);
-		closed_ = ready_ = true;
-		cond_.notify_all();
-	}
-
-	// Increments the count, and then signals once every 10 messages.
-	void incr() {
-		guard g(lock_);
-		if (closed_)
-			throw string("Counter is closed");
-		if (++count_ % 10 == 0) {
-			ready_ = true;
-			g.unlock();
-			cond_.notify_all();
-		}
-	}
-
-	// This will block the caller until at least 10 new messages received.
-	size_t get_count() const {
-		guard g(lock_);
-		cond_.wait(g, [this]{ return ready_; });
-		ready_ = false;
-		return count_;
-	}
-};
-
-/////////////////////////////////////////////////////////////////////////////
-
-// The MQTT publisher function will run in its own thread.
-// It runs until the receiver thread closes the counter object.
-void publisher_func(mqtt::async_client_ptr cli, multithr_counter::ptr_t counter)
-{
-	while (true) {
-		size_t n = counter->get_count();
-		if (counter->closed()) break;
-
-		string payload = std::to_string(n);
-		cli->publish("events/count", payload)->wait();
-	}
-}
+void *data_center_thread(void *arg);
+void *publish_thread(void *arg);
 
 /////////////////////////////////////////////////////////////////////////////
 
 int main(int argc, char* argv[])
 {
-	 string address = (argc > 1) ? string(argv[1]) : DFLT_SERVER_ADDRESS;
 
-	// Create an MQTT client using a smart pointer to be shared among threads.
-	auto cli = std::make_shared<mqtt::async_client>(address, CLIENT_ID);
+    // setting the log
+    spdlog::set_level(spdlog::level::debug);
+    spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [thread %t] [%l] %v");
+    // log the information
+    spdlog::debug("start the mqtt client");    
 
-	// Make a counter object also with a shared pointer.
-	auto counter = std::make_shared <multithr_counter>();
+    // create the thread to handle the message
+    pthread_t data_center_thread_id;
+    pthread_create(&data_center_thread_id, NULL, data_center_thread, NULL);
+    // create the thread to publish the message
+    pthread_t publish_thread_id;
+    pthread_create(&publish_thread_id, NULL, publish_thread, NULL);
 
-	// Connect options for a persistent session and automatic reconnects.
+    // create the mqtt client
+	mqtt::async_client cli(SERVER_ADDRESS, CLIENT_ID);
+
 	auto connOpts = mqtt::connect_options_builder()
 		.clean_session(false)
-		.automatic_reconnect(seconds(2), seconds(30))
 		.finalize();
 
-	auto TOPICS = mqtt::string_collection::create({ "data/#", "command" });
-	const vector<int> QOS { 0, 1 };
-
 	try {
-		// Start consuming _before_ connecting, because we could get a flood
-		// of stored messages as soon as the connection completes since
-		// we're using a persistent (non-clean) session with the broker.
-		cli->start_consuming();
+		// Start consumer before connecting to make sure to not miss messages
 
-		cout << "Connecting to the MQTT server at " << address << "..." << flush;
-		auto rsp = cli->connect(connOpts)->get_connect_response();
-		cout << "OK\n" << endl;
+		cli.start_consuming();
 
-		// Subscribe if this is a new session with the server
+		// Connect to the server
+
+		spdlog::debug("connecting to the mqtt server");
+		auto tok = cli.connect(connOpts);
+
+		// Getting the connect response will block waiting for the
+		// connection to complete.
+		auto rsp = tok->get_connect_response();
+
+		// If there is no session present, then we need to subscribe, but if
+		// there is a session, then the server remembers us and our
+		// subscriptions.
 		if (!rsp.is_session_present())
-			cli->subscribe(TOPICS, QOS);
+			cli.subscribe(TOPIC, QOS)->wait();
 
-		// Start the publisher thread
+		spdlog::debug("connected to the mqtt server");
 
-		std::thread publisher(publisher_func, cli, counter);
+		// Consume messages
+		// This just exits if the client is disconnected.
+		// (See some other examples for auto or manual reconnect)
 
-		// Consume messages in this thread
+        spdlog::debug("start to consume the message");
 
 		while (true) {
-			auto msg = cli->consume_message();
-
-			if (!msg)
-				continue;
-
-			if (msg->get_topic() == "command" &&
-					msg->to_string() == "exit") {
-				cout << "Exit command received" << endl;
-				break;
-			}
-
-			cout << msg->get_topic() << ": " << msg->to_string() << endl;
-			counter->incr();
+			auto msg = cli.consume_message();
+			if (!msg) break;
+			// add the message to the sub_topics queue
+            std::string data = static_cast<std::string>(msg->get_payload());
+            std::string topic = static_cast<std::string>(msg->get_topic());
+            spdlog::debug("message topic: {}, message data: {}", topic, data);
+            sub_topics.push(data, topic);
+            //debug the message information
 		}
 
-		// Close the counter and wait for the publisher thread to complete
-		cout << "\nShutting down..." << flush;
-		counter->close();
-		publisher.join();
+		// If we're here, the client was almost certainly disconnected.
+		// But we check, just to make sure.
 
-		// Disconnect
-
-		cout << "OK\nDisconnecting..." << flush;
-		cli->disconnect();
-		cout << "OK" << endl;
+		if (cli.is_connected()) {
+			cout << "\nShutting down and disconnecting from the MQTT server..." << flush;
+			cli.unsubscribe(TOPIC)->wait();
+			cli.stop_consuming();
+			cli.disconnect()->wait();
+			cout << "OK" << endl;
+		}
+		else {
+			cout << "\nClient was disconnected" << endl;
+		}
 	}
 	catch (const mqtt::exception& exc) {
-		cerr << exc.what() << endl;
+		cerr << "\n  " << exc << endl;
 		return 1;
 	}
 
  	return 0;
+}
+
+// the thread handle the message from the sub_topics queue
+void *data_center_thread(void *arg)
+{
+    while(1)
+    {
+        if(sub_topics.empty())
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
+        }
+        message m = sub_topics.pop();
+        std::string data = m.get_data();
+        std::string topic = m.get_topic();
+        cout<<"data: "<<data<<endl;
+    }
+}
+
+void *publish_thread(void *arg)
+{
+    while(1)
+    {
+        if(pub_topics.empty())
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
+        }
+        message m = pub_topics.pop();
+        std::string data = m.get_data();
+        std::string topic = m.get_topic();
+        cout<<"data: "<<data<<endl;
+    }
+}
+
+// the thread create a reagion and handle the message from the reagion
+void *region_thread(void *arg)
+{
+    // create the region
+    dormitoryIOT dormitory("dormitory614", "dormitory614_id");
+    // create systems belong to the region
+    lighting lighting_led("led", "led_id", true);
+    security security_smoke("smoke", "smoke_id", true);
+    // create the devices belong to this systems
+    led led1("led1", "led1_id", "off", 0);
+    dth11 dth11_1("dth11_1", "dth11_1_id", 0, 0);
+    mq2 mq2_1("mq2_1", "mq2_1_id", 0, "o");
+
+    // add the devices to the systems
+    lighting_led.add_device(&led1);
+    security_smoke.add_device(&dth11_1);
+    security_smoke.add_device(&mq2_1);
+
+    // add the systems to the region
+    dormitory.add_system(&lighting_led);
+    dormitory.add_system(&security_smoke);
+
+    // receive message from the sub_topics queue and handle its
+    while(1)
+    {
+        if(sub_topics.empty())
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
+        }
+        message m = sub_topics.pop();
+        std::string data = m.get_data();
+        std::string topic = m.get_topic();
+        cout<<"data: "<<data<<endl;
+        // handle the message
+        dormitory.handle_message(m);
+    }
+
 }

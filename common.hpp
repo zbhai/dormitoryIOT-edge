@@ -1,6 +1,259 @@
 #ifndef __COMMON_H__
 #define __COMMON_H__
 
+#include "pthread.h"
+#include "mqtt/async_client.h"
 
+
+class message
+{
+    std::string data;
+    std::string topic;
+
+    public:
+    message(const std::string &data, const std::string &topic) : data(data), topic(topic) {}
+    std::string get_data() const { return data; }
+    std::string get_topic() const { return topic; }
+};
+
+class message_queue
+{
+    std::list<message> messages;
+    int length;
+    int max_size;
+
+    pthread_mutex_t  mutex;
+
+    public:
+    message_queue(int max_size) : messages(), length(0), max_size(max_size)
+    {
+        pthread_mutex_init(&mutex, NULL);
+    }
+    ~message_queue()
+    {
+        pthread_mutex_destroy(&mutex);
+    }
+    int push(std::string &data, std::string &topic) 
+    { 
+        if(length < max_size)
+        {
+            pthread_mutex_lock(&mutex);
+            messages.push_back(message(data, topic));
+            pthread_mutex_unlock(&mutex);
+            length++;
+            return 0;
+        }
+        return -1;
+    }
+    message pop() 
+    { 
+        if(messages.empty())
+            return message("", "");
+        pthread_mutex_lock(&mutex);
+        message m = messages.front(); 
+        messages.pop_front();
+        pthread_mutex_unlock(&mutex);
+        length--;
+        return m; 
+    }
+    bool empty() { return messages.empty(); }
+    int size() { return messages.size(); }
+};
+
+message EMPTY_MESSAGE("", "");
+
+
+// define the device message model
+//---------------LED----------------
+// led status: off/on               ; the led status is read and write
+// led pin number: uint8_t          ; the led pin number is read
+//---------------LED----------------
+// the led status will be write to the device, if the nother things is occur.
+
+
+// --------------DTH11--------------
+// termperature: uint8_t            ; the temperature is read
+// humidity: uint8_t                ; the humidity is read
+// --------------DTH11--------------
+// only show the temperature and humidity in screen
+
+
+// --------------MQ2---------------
+// smoke value: uint8_t             ; the smoke value is read
+// alarm status: off/on             ; the alarm status is read and write
+// --------------MQ2---------------
+// the alarm status will be write to the device, if the nother things is occur.
+
+
+class device
+{
+    std::string device_name;
+    std::string device_id;
+
+    public:
+    device(std::string device_name, std::string device_id) : device_name(device_name), device_id(device_id) {}
+    std::string device_name() const { return device_name; }
+    std::string device_id() const { return device_id; }
+    virtual bool synced() = 0;
+};
+
+class led : public device
+{
+    std::string status;
+    std::string desired_status;
+    uint8_t pin_number;
+
+    public:
+    led(std::string device_name, std::string device_id, std::string status, uint8_t pin_number) : device(device_name, device_id), status(status), pin_number(pin_number) {}
+    std::string cur_status() const { return status; }
+    void desired_status(std::string desired) const; // create a task and be executed later
+    bool synced() { return status == desired_status; }
+};
+inline void led::desired_status(std::string desired) const
+{
+    // create a message and push to the message queue
+    // the message will be send to the device
+    pub_topics.push(desired, SEN_DEVICE_TOPIC);
+    desired_status = desired;
+    return ;
+}
+
+class dth11 : public device
+{
+    uint8_t temperature;
+    uint8_t humidity;
+
+    public:
+    dth11(std::string device_name, std::string device_id, uint8_t temperature, uint8_t humidity) : device(device_name, device_id), temperature(temperature), humidity(humidity) {}
+    uint8_t device_temperature() const { return temperature; }
+    uint8_t device_humidity() const { return humidity; }
+    bool synced() { return true; }
+};
+
+class mq2 : public device
+{
+    uint8_t smoke_value;
+    std::string alarm_status;
+    std::string desired_alarm_status;
+
+    public:
+    mq2(std::string device_name, std::string device_id, uint8_t smoke_value, std::string alarm_status) : device(device_name, device_id), smoke_value(smoke_value), alarm_status(alarm_status) {}
+    uint8_t device_smoke_value() const { return smoke_value; }
+    std::string cur_alarm_status() const { return alarm_status; }
+    void desired_alarm_status(std::string desired) const { return ; } // create a task and be executed later
+    bool synced() { return alarm_status == desired_alarm_status; }
+};
+
+class system
+{
+    bool is_basic_system;
+    std::string system_name;
+    std::string system_id;
+    list<device *> devices;
+    list<system *> subsystems;
+    list<system *> related_systems;
+
+    public:
+    system(std::string system_name, std::string system_id, bool is_basic_system) : system_name(system_name), system_id(system_id), is_basic_system(is_basic_system) {}
+    std::string system_name() const { return system_name; }
+    std::string system_id() const { return system_id; }
+    bool is_basic_system() const { return is_basic_system; }
+    list<device *> devices() const { return devices; }
+    list<system *> subsystems() const { return subsystems; }
+    list<system *> related_systems() const { return related_systems; }
+    void add_device(device *d) { devices.push_back(d); }
+    void add_subsystem(system *s) { subsystems.push_back(s); }
+    void add_related_system(system *s) { related_systems.push_back(s); }
+
+    private:
+    virtual void control_panel() = 0; // control the system
+};
+
+class lighting : public system
+{
+    map<std::string, list<device>> groups;
+    
+    public:
+    lighting(std::string system_name, std::string system_id, bool is_basic_system) : system(system_name, system_id, is_basic_system) {}
+    map<std::string, list<device>> groups() const { return groups; }
+
+    private:
+    void control_panel(); // control the lighting system
+
+};
+
+inline void lighting::control_panel()
+{
+    // turn on/off the light based on the time
+    auto origin_time = std::time(nullptr);
+    auto local_time = std::localtime(&origin_time);
+    auto hour = local_time->tm_hour; // int 
+    auto minute = local_time->tm_min;  // int
+    
+    // the time control panel is based on groups
+    auto iter = groups.find("dormitory");
+    auto devices = iter->second;
+    for (auto device : devices)
+    {
+        if (hour >= 23 || hour <= 6)
+        {
+            // turn on the light
+            device->desired_status = "on";
+        }
+        else
+        {
+            // turn off the light
+            device->desired_status = "off";
+        }
+    }
+
+    // turn on/off the light based on the motion sensor
+    // now the motion sensor is empty
+}
+
+class security : public system
+{
+    std::string security_status;
+    
+    public:
+    security(std::string system_name, std::string system_id, bool is_basic_system) : system(system_name, system_id, is_basic_system) {}
+    std::string security_status() const { return security_status; }
+
+    private:
+    void control_panel(); // control the security system
+};
+inline void security::control_panel()
+{
+    // control the security system
+    // now, the control panel is empty
+}
+
+class region
+{
+    std::string region_name;
+    std::string region_id;
+    list<system *> systems;
+
+    public:
+    region(std::string region_name, std::string region_id) : region_name(region_name), region_id(region_id) {}
+    std::string region_name() const { return region_name; }
+    std::string region_id() const { return region_id; }
+    list<system *> systems() const { return systems; }
+    void add_system(system *s) { systems.push_back(s); }
+    void delete_system(system *s) { systems.remove(s); }
+};
+
+class dormitoryIOT : public region
+{
+    public:
+    dormitoryIOT(std::string region_name, std::string region_id) : region(region_name, region_id) {};
+    void handle_message(message& m);
+};
+
+inline void dormitoryIOT::handle_message(message& m)
+{
+    // handle the message
+    // now, the handle_message is empty
+}
 
 #endif
