@@ -97,7 +97,8 @@ public:
   bool has_security_update;
 
   region(std::string region_name, std::string region_id)
-      : region_name(region_name), region_id(region_id) {}
+      : region_name(region_name), region_id(region_id),
+        has_security_update(false) {}
   std::string get_region_name() const { return region_name; }
   std::string get_region_id() const { return region_id; }
   std::list<systemIOT *> get_systems() { return systems; }
@@ -255,22 +256,22 @@ public:
     auto hour = local_time->tm_hour;  // int
     auto minute = local_time->tm_min; // int
 
-    // the time control panel is based on groups
-    auto iter = lighting_groups.find("dormitory");
-    auto devices = iter->second;
-    for (auto device : devices) {
-      if (hour >= 23 || hour <= 6) {
-        // turn on the light
-        led *lighting = dynamic_cast<led *>(device);
-        auto m = lighting->set_desired_status("on");
-        dormitory->push_message(m.get_data(), m.get_topic());
-      } else {
-        // turn off the light
-        led *lighting = dynamic_cast<led *>(device);
-        auto m = lighting->set_desired_status("off");
-        dormitory->push_message(m.get_data(), m.get_topic());
-      }
-    }
+    // // the time control panel is based on groups
+    // auto iter = lighting_groups.find("dormitory");
+    // auto devices = iter->second;
+    // for (auto device : devices) {
+    //   if (hour >= 23 || hour <= 6) {
+    //     // turn on the light
+    //     led *lighting = dynamic_cast<led *>(device);
+    //     auto m = lighting->set_desired_status("on");
+    //     dormitory->push_message(m.get_data(), m.get_topic());
+    //   } else {
+    //     // turn off the light
+    //     led *lighting = dynamic_cast<led *>(device);
+    //     auto m = lighting->set_desired_status("off");
+    //     dormitory->push_message(m.get_data(), m.get_topic());
+    //   }
+    // }
     // turn on/off the light based on the motion sensor
     // now the motion sensor is empty
   }
@@ -291,6 +292,8 @@ inline void security::control_panel(void *arg) {
 }
 
 void *handle_message_thread(void *arg) {
+
+  spdlog::debug("handle_message_thread start");
 
   dormitoryIOT *dormitory = (dormitoryIOT *)arg;
   auto pub_topics = dormitory->pub_topics;
@@ -314,6 +317,9 @@ void *handle_message_thread(void *arg) {
 }
 
 void *security_thread(void *arg) {
+
+  spdlog::debug("security_thread start");
+
   dormitoryIOT *dormitory = (dormitoryIOT *)arg;
   auto security_topics = dormitory->security_topics;
   auto security_system = dormitory->security_system;
@@ -328,12 +334,19 @@ void *security_thread(void *arg) {
       spdlog::critical("security system update: topic: {}, data: {}", topic,
                        data);
     }
-    security_system->control_panel(nullptr);
-    usleep(100);
+    if (security_system == nullptr) {
+      spdlog::critical("security system is not initialized");
+    } else {
+      security_system->control_panel(dormitory);
+    }
+    usleep(100000);
   }
 }
 
 void *control_panel_thread(void *arg) {
+
+  spdlog::debug("control_panel_thread start");
+
   dormitoryIOT *dormitory = (dormitoryIOT *)arg;
   // get all the systems except the security system
   auto systems = dormitory->systems;

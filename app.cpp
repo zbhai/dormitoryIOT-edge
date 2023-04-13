@@ -28,15 +28,15 @@ using namespace std;
 
 const int QOS = 1;
 
-void *data_center_thread(void *arg);
-void *publish_thread(void *arg);
-
 /////////////////////////////////////////////////////////////////////////////
 
 void *mqtt_thread(void *arg) {
 
+  spdlog::debug("start the mqtt thread");
   // get dormitory
   auto dormitory = (dormitoryIOT *)arg;
+
+  spdlog::debug("start to create the mqtt client");
 
   // create the mqtt client
   mqtt::async_client cli(SERVER_ADDRESS, CLIENT_ID);
@@ -106,7 +106,7 @@ void *mqtt_thread(void *arg) {
 }
 
 // the thread create a reagion and handle the message from the reagion
-void *main_thread(void *arg) {
+int main(int argc, char *argv[]) {
 
   // setting the log
   spdlog::set_level(spdlog::level::debug);
@@ -124,6 +124,8 @@ void *main_thread(void *arg) {
   dth11 dth11_1("dth11_1", "dth11_1_id", 0, 0);
   mq2 mq2_1("mq2_1", "mq2_1_id", 0, "o");
 
+  spdlog::debug("completely the creating of the region");
+
   // add the devices to the systems
   lighting_led.add_device(&led1);
   security_smoke.add_device(&dth11_1);
@@ -132,9 +134,10 @@ void *main_thread(void *arg) {
   // add the systems to the region
   dormitory.add_system(&lighting_led);
   dormitory.add_system(&security_smoke);
+  dormitory.set_security_system(&security_smoke);
 
   // create all threads for the region
-  dormitory.region_thread(nullptr);
+  dormitory.region_thread(&dormitory);
 
   // the main thread is not exit, because it create three thread belong to
   // dormitory
@@ -144,7 +147,7 @@ void *main_thread(void *arg) {
   pthread_create(&mqtt_thread_handler, nullptr, mqtt_thread, &dormitory);
 
   while (true) {
+    spdlog::debug("main thread is running");
+    usleep(1000000);
   }
 }
-
-int main(int argc, char *argv[]) { return 0; }
