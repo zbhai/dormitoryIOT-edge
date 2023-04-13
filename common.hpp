@@ -12,6 +12,11 @@ const std::string REC_DEVICE_TOPIC{"$ke/events/device/+/data/update"};
 const std::string SEN_DEVICE_TOPIC{"$hw/events/device/+/twin/update/delta"};
 const std::string SEN_CLOUD_TOPIC{"SYS/dis/upload_records"};
 
+// declare functions
+void *control_panel_thread(void *arg);
+void *security_thread(void *arg);
+void *handle_message_thread(void *arg);
+
 class message {
   std::string data;
   std::string topic;
@@ -103,16 +108,15 @@ public:
       : device(device_name, device_id), status(status), pin_number(pin_number) {
   }
   std::string get_status() const { return status; }
-  void set_desired_status(
-      std::string desired) const; // create a task and be executed later
+  message set_desired_status(
+      std::string desired); // create a task and be executed later
   bool synced() { return status == desired_status; }
 };
-inline void led::set_desired_status(std::string desired) const {
+inline message led::set_desired_status(std::string desired) {
   // create a message and push to the message queue
-  // the message will be send to the device
-  pub_topics.push(desired, SEN_DEVICE_TOPIC);
-  desired_status = desired;
-  return;
+  std::string topic(SEN_DEVICE_TOPIC);
+  topic.replace(topic.find("+"), 1, "device_id");
+  return message(desired, topic);
 }
 
 class dth11 : public device {
@@ -151,9 +155,9 @@ class systemIOT {
   bool is_basic_system;
   std::string system_name;
   std::string system_id;
-  list<device *> devices;
-  list<systemIOT *> subsystems;
-  list<systemIOT *> related_systems;
+  std::list<device *> devices;
+  std::list<systemIOT *> subsystems;
+  std::list<systemIOT *> related_systems;
 
 public:
   systemIOT(std::string system_name, std::string system_id,
@@ -163,9 +167,9 @@ public:
   std::string get_name() const { return system_name; }
   std::string get_id() const { return system_id; }
   bool is_basic() const { return is_basic_system; }
-  list<device *> get_devices() const { return devices; }
-  list<systemIOT *> get_subsystems() const { return subsystems; }
-  list<systemIOT *> get_related_systems() const { return related_systems; }
+  std::list<device *> get_devices() const { return devices; }
+  std::list<systemIOT *> get_subsystems() const { return subsystems; }
+  std::list<systemIOT *> get_related_systems() const { return related_systems; }
   void add_device(device *d) { devices.push_back(d); }
   void add_subsystem(systemIOT *s) { subsystems.push_back(s); }
   void add_related_system(systemIOT *s) { related_systems.push_back(s); }
@@ -173,15 +177,18 @@ public:
 };
 
 class lighting : public systemIOT {
-  map<std::string, list<device *>> lighting_groups;
+  std::map<std::string, std::list<device *>> lighting_groups;
 
 public:
   lighting(std::string system_name, std::string system_id, bool is_basic_system)
       : systemIOT(system_name, system_id, is_basic_system) {}
-  map<std::string, list<device *>> get_groups() const {
+  std::map<std::string, std::list<device *>> get_groups() const {
     return lighting_groups;
   }
-  inline void control_panel() {
+  inline void control_panel(void *arg) {
+    // get the dormitory
+    auto dormitory = (dormitoryIOT *)arg;
+
     // turn on/off the light based on the time
     auto origin_time = std::time(nullptr);
     auto local_time = std::localtime(&origin_time);
@@ -195,14 +202,15 @@ public:
       if (hour >= 23 || hour <= 6) {
         // turn on the light
         led *lighting = dynamic_cast<led *>(device);
-        lighting->set_desired_status("on");
+        auto m = lighting->set_desired_status("on");
+        dormitory->push_message(m.get_data(), m.get_topic());
       } else {
         // turn off the light
         led *lighting = dynamic_cast<led *>(device);
-        lighting->set_desired_status("off");
+        auto m = lighting->set_desired_status("off");
+        dormitory->push_message(m.get_data(), m.get_topic());
       }
     }
-
     // turn on/off the light based on the motion sensor
     // now the motion sensor is empty
   }
@@ -214,7 +222,7 @@ class security : public systemIOT {
 public:
   security(std::string system_name, std::string system_id, bool is_basic_system)
       : systemIOT(system_name, system_id, is_basic_system) {}
-  std::string security_status() const { return security_status; }
+  std::string get_security_status() const { return security_status; }
   void control_panel(void *arg); // control the security system
 };
 inline void security::control_panel(void *arg) {
@@ -227,19 +235,20 @@ class region {
   std::string region_id;
 
 public:
-  list<systemIOT *> systems;
+  std::list<systemIOT *> systems;
   systemIOT *security_system;
   bool has_security_update;
 
   region(std::string region_name, std::string region_id, bool security_update)
       : region_name(region_name), region_id(region_id),
         has_security_update(security_update) {}
-  std::string region_name() const { return region_name; }
-  std::string region_id() const { return region_id; }
-  list<systemIOT *> systems() const { return systems; }
+  std::string get_region_name() const { return region_name; }
+  std::string get_region_id() const { return region_id; }
+  std::list<systemIOT *> systems() const { return systems; }
   void add_system(systemIOT *s) { systems.push_back(s); }
   void delete_system(systemIOT *s) { systems.remove(s); }
   void set_security_system(systemIOT *s) { security_system = s; }
+  bool get_security_update() const { return has_security_update; }
 };
 
 class dormitoryIOT : public region {
@@ -258,7 +267,7 @@ public:
     pub_topics.push(data, topic);
   }
   message pop_message() { return pub_topics.pop(); }
-  bool has_security_update() const { return has_security_update; }
+  bool has_security_update() const { return get_security_update(); }
   message pop_security_message() { return security_topics.pop(); }
   void push_security_message(std::string data, std::string topic) {
     security_topics.push(data, topic);
@@ -337,7 +346,7 @@ void *control_panel_thread(void *arg) {
     }
     usleep(100);
   }
-  return;
+  return nullptr;
 }
 
 #endif
