@@ -38,13 +38,6 @@ void *mqtt_thread(void *arg) {
   // get dormitory
   auto dormitory = (dormitoryIOT *)arg;
 
-  // create the thread to handle the message
-  pthread_t data_center_thread_id;
-  pthread_create(&data_center_thread_id, NULL, data_center_thread, NULL);
-  // create the thread to publish the message
-  pthread_t publish_thread_id;
-  pthread_create(&publish_thread_id, NULL, publish_thread, NULL);
-
   // create the mqtt client
   mqtt::async_client cli(SERVER_ADDRESS, CLIENT_ID);
 
@@ -153,3 +146,5 @@ void *main_thread(void *arg) {
   while (true) {
   }
 }
+
+int main(int argc, char *argv[]) { return 0; }

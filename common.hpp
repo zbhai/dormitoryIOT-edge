@@ -85,6 +85,66 @@ message EMPTY_MESSAGE("", "");
 // --------------MQ2---------------
 // the alarm status will be write to the device, if the nother things is occur.
 
+class systemIOT;
+
+class region {
+  std::string region_name;
+  std::string region_id;
+
+public:
+  std::list<systemIOT *> systems;
+  systemIOT *security_system;
+  bool has_security_update;
+
+  region(std::string region_name, std::string region_id)
+      : region_name(region_name), region_id(region_id) {}
+  std::string get_region_name() const { return region_name; }
+  std::string get_region_id() const { return region_id; }
+  std::list<systemIOT *> get_systems() { return systems; }
+  void add_system(systemIOT *s) { systems.push_back(s); }
+  void delete_system(systemIOT *s) { systems.remove(s); }
+  void set_security_system(systemIOT *s) { security_system = s; }
+  bool get_security_update() const { return has_security_update; }
+};
+
+class dormitoryIOT : public region {
+
+public:
+  message_queue pub_topics;
+  message_queue sub_topics;
+  message_queue security_topics;
+
+  dormitoryIOT(std::string region_name, std::string region_id, int pub_size,
+               int sub_size)
+      : region(region_name, region_id), pub_topics(pub_size),
+        sub_topics(sub_size), security_topics(sub_size / 2) {}
+  void push_message(std::string data, std::string topic) {
+    pub_topics.push(data, topic);
+  }
+  message pop_message() { return pub_topics.pop(); }
+  bool has_security_update() const { return get_security_update(); }
+  message pop_security_message() { return security_topics.pop(); }
+  void push_security_message(std::string data, std::string topic) {
+    security_topics.push(data, topic);
+  }
+  void region_thread(void *arg) {
+    // first, create a thread to handle the security system
+    dormitoryIOT *dormitory = (dormitoryIOT *)arg;
+    pthread_t security_thread_handler;
+    pthread_create(&security_thread_handler, NULL, security_thread, dormitory);
+
+    // second, create a thread to handle the message
+    pthread_t message_thread_handler;
+    pthread_create(&message_thread_handler, NULL, handle_message_thread,
+                   dormitory);
+
+    // fourth, create a thread to handle the control panel
+    pthread_t control_panel_thread_handler;
+    pthread_create(&control_panel_thread_handler, NULL, control_panel_thread,
+                   dormitory);
+  }
+};
+
 class device {
   std::string device_name;
   std::string device_id;
@@ -229,64 +289,6 @@ inline void security::control_panel(void *arg) {
   // control the security system
   // now, the control panel is empty
 }
-
-class region {
-  std::string region_name;
-  std::string region_id;
-
-public:
-  std::list<systemIOT *> systems;
-  systemIOT *security_system;
-  bool has_security_update;
-
-  region(std::string region_name, std::string region_id)
-      : region_name(region_name), region_id(region_id) {}
-  std::string get_region_name() const { return region_name; }
-  std::string get_region_id() const { return region_id; }
-  std::list<systemIOT *> get_systems() { return systems; }
-  void add_system(systemIOT *s) { systems.push_back(s); }
-  void delete_system(systemIOT *s) { systems.remove(s); }
-  void set_security_system(systemIOT *s) { security_system = s; }
-  bool get_security_update() const { return has_security_update; }
-};
-
-class dormitoryIOT : public region {
-
-public:
-  message_queue pub_topics;
-  message_queue sub_topics;
-  message_queue security_topics;
-
-  dormitoryIOT(std::string region_name, std::string region_id, int pub_size,
-               int sub_size)
-      : region(region_name, region_id), pub_topics(pub_size),
-        sub_topics(sub_size), security_topics(sub_size / 2) {}
-  void push_message(std::string data, std::string topic) {
-    pub_topics.push(data, topic);
-  }
-  message pop_message() { return pub_topics.pop(); }
-  bool has_security_update() const { return get_security_update(); }
-  message pop_security_message() { return security_topics.pop(); }
-  void push_security_message(std::string data, std::string topic) {
-    security_topics.push(data, topic);
-  }
-  void region_thread(void *arg) {
-    // first, create a thread to handle the security system
-    dormitoryIOT *dormitory = (dormitoryIOT *)arg;
-    pthread_t security_thread_handler;
-    pthread_create(&security_thread_handler, NULL, security_thread, dormitory);
-
-    // second, create a thread to handle the message
-    pthread_t message_thread_handler;
-    pthread_create(&message_thread_handler, NULL, handle_message_thread,
-                   dormitory);
-
-    // fourth, create a thread to handle the control panel
-    pthread_t control_panel_thread_handler;
-    pthread_create(&control_panel_thread_handler, NULL, control_panel_thread,
-                   dormitory);
-  }
-};
 
 void *handle_message_thread(void *arg) {
 
