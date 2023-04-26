@@ -96,16 +96,9 @@ void *mqtt_thread(void *arg) {
   exit(0);
 }
 
-// the thread create a reagion and handle the message from the reagion
-int main(int argc, char *argv[]) {
-
-  // setting the log
-  spdlog::set_level(spdlog::level::debug);
-  spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [thread %t] [%l] %v");
-  // log the information
-
-  // create the region
-  dormitoryIOT dormitory("dormitory614", "dormitory614_id", 100, 100);
+// the function setup the dormitory region
+// setup the dormitory region,
+void dormitory_setup(dormitoryIOT &dormitory) {
   // create systems belong to the region
   lighting lighting_led("led", "led_id", true);
   security security_smoke("smoke", "smoke_id", true);
@@ -127,6 +120,18 @@ int main(int argc, char *argv[]) {
   // set the lighting system groups
   auto devices = list<device *>{&led1};
   lighting_led.add_group("dormitory", devices);
+}
+
+// the thread create a reagion and handle the message from the reagion
+int main(int argc, char *argv[]) {
+
+  // setting the log
+  spdlog::set_level(spdlog::level::debug);
+  spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [thread %t] [%l] %v");
+
+  // create the region
+  dormitoryIOT dormitory("dormitory614", "dormitory614_id", 100, 100);
+  dormitory_setup(dormitory);
 
   // create all threads for the region
   dormitory.region_thread(&dormitory);
