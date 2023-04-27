@@ -264,17 +264,23 @@ public:
     auto minute = local_time->tm_min; // int
 
     // the time control panel is based on groups
+    // assert the lighting_groups is not empty
+    if (lighting_groups.empty()) {
+      return;
+    }
     auto iter = lighting_groups.find("dormitory");
     auto devices = iter->second;
     for (auto device : devices) {
       if (hour >= 23 || hour <= 6) {
         // turn on the light
         led *lighting = dynamic_cast<led *>(device);
+        spdlog::debug("turn on the light");
         auto m = lighting->set_desired_status("on");
         dormitory->push_sub_message(m.get_data(), m.get_topic());
       } else {
         // turn off the light
         led *lighting = dynamic_cast<led *>(device);
+        spdlog::debug("turn off the light");
         auto m = lighting->set_desired_status("off");
         dormitory->push_sub_message(m.get_data(), m.get_topic());
       }

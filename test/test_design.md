@@ -59,5 +59,3 @@ the led device is model to manage the actual device. it store the device propert
 ### mq2 device
 - intialize the mq2 device instance
 - 
-
-
