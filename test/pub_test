@@ -1,0 +1,2 @@
+#!/bin/bash
+mosquitto_pub -h localhost -t "dormitoryIOT/test" -i "pub_test" -m "Hello World!"
