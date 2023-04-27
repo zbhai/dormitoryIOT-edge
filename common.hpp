@@ -123,11 +123,11 @@ public:
                int sub_size)
       : region(region_name, region_id), pub_topics(pub_size),
         sub_topics(sub_size), security_topics(sub_size / 2) {}
-  void push_message(std::string data, std::string topic) {
+  void push_sub_message(std::string data, std::string topic) {
     sub_topics.push(data, topic);
   }
-  message pop_message() { return sub_topics.pop(); }
-  bool has_security_update() const { return get_security_update(); }
+  message pop_sub_message() { return sub_topics.pop(); }
+  bool get_has_security_update() const { return get_security_update(); }
   message pop_security_message() { return security_topics.pop(); }
   void push_security_message(std::string data, std::string topic) {
     security_topics.push(data, topic);
@@ -271,12 +271,12 @@ public:
         // turn on the light
         led *lighting = dynamic_cast<led *>(device);
         auto m = lighting->set_desired_status("on");
-        dormitory->push_message(m.get_data(), m.get_topic());
+        dormitory->push_sub_message(m.get_data(), m.get_topic());
       } else {
         // turn off the light
         led *lighting = dynamic_cast<led *>(device);
         auto m = lighting->set_desired_status("off");
-        dormitory->push_message(m.get_data(), m.get_topic());
+        dormitory->push_sub_message(m.get_data(), m.get_topic());
       }
     }
     // turn on/off the light based on the motion sensor now the motion sensor
@@ -289,7 +289,8 @@ class security : public systemIOT {
 
 public:
   security(std::string system_name, std::string system_id, bool is_basic_system)
-      : systemIOT(system_name, system_id, is_basic_system) {}
+      : systemIOT(system_name, system_id, is_basic_system),
+        security_status("no") {}
   std::string get_security_status() const { return security_status; }
   void control_panel(void *arg); // control the security system
 };
@@ -334,7 +335,7 @@ void *security_thread(void *arg) {
   auto security_system = dormitory->security_system;
 
   while (true) {
-    if (dormitory->has_security_update()) {
+    if (dormitory->get_has_security_update()) {
       // update the security system
       auto m = dormitory->pop_security_message();
       auto topic = m.get_topic();

@@ -71,7 +71,7 @@ void *mqtt_thread(void *arg) {
       // add the message to the sub_topics queue
       std::string data = static_cast<std::string>(msg->get_payload());
       std::string topic = static_cast<std::string>(msg->get_topic());
-      dormitory->push_message(data, topic);
+      dormitory->push_sub_message(data, topic);
       // debug the message information
     }
 
