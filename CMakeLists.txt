@@ -14,5 +14,6 @@ paho-mqtt3as
 paho-mqtt3c
 paho-mqtt3cs
 paho-mqttpp3
+pthread
 )
 

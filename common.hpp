@@ -114,27 +114,34 @@ public:
 
 class dormitoryIOT : public region {
 
-public:
+private:
   message_queue pub_topics;
   message_queue sub_topics;
   message_queue security_topics;
+
+  static dormitoryIOT *instance;
 
   dormitoryIOT(std::string region_name, std::string region_id, int pub_size,
                int sub_size)
       : region(region_name, region_id), pub_topics(pub_size),
         sub_topics(sub_size), security_topics(sub_size / 2) {}
-  void push_sub_message(std::string data, std::string topic) {
-    sub_topics.push(data, topic);
+
+public:
+  dormitoryIOT *Getinstance(std::string region_name, std::string region_id,
+                            int pub_size, int sub_size) {
+    if (instance == nullptr) {
+      static dormitoryIOT diot(region_name, region_id, pub_size, sub_size);
+      instance = &diot;
+      return instance;
+    } else {
+      return instance;
+    }
   }
-  message pop_sub_message() { return sub_topics.pop(); }
-  bool get_has_security_update() const { return get_security_update(); }
-  message pop_security_message() { return security_topics.pop(); }
-  void push_security_message(std::string data, std::string topic) {
-    security_topics.push(data, topic);
-  }
+
   void region_thread(void *arg) {
     // first, create a thread to handle the security system
     dormitoryIOT *dormitory = (dormitoryIOT *)arg;
+
     pthread_t security_thread_handler;
     pthread_create(&security_thread_handler, NULL, security_thread, dormitory);
 

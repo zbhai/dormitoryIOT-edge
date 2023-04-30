@@ -26,6 +26,12 @@
 
 using namespace std;
 
+// create a dormitory region that will be used many threads
+dormitoryIOT dormitory("dormitory614", "dormitory614_id", 100, 100);
+// craete a mutex to protect the dormitory is right
+pthread_mutex_t dormitory_mutex;
+int is_intialized = 0;
+
 const int QOS = 1;
 
 /////////////////////////////////////////////////////////////////////////////
@@ -99,6 +105,10 @@ void *mqtt_thread(void *arg) {
 // the function setup the dormitory region
 // setup the dormitory region,
 void dormitory_setup(dormitoryIOT &dormitory) {
+
+  pthread_mutex_init(&dormitory_mutex, NULL);
+  is_intialized = 1;
+
   // create systems belong to the region
   lighting lighting_led("led", "led_id", true);
   security security_smoke("smoke", "smoke_id", true);
@@ -122,6 +132,14 @@ void dormitory_setup(dormitoryIOT &dormitory) {
   lighting_led.add_group("dormitory", devices);
 }
 
+int dormitory_lock() { return pthread_mutex_lock(&dormitory_mutex); }
+
+int dormitory_unlock() { return pthread_mutex_unlock(&dormitory_mutex); }
+
+int dormitory_try_lock() { return pthread_mutex_trylock(&dormitory_mutex); }
+
+int dormitory_is_initialized() { return is_intialized; }
+
 // the thread create a reagion and handle the message from the reagion
 int main(int argc, char *argv[]) {
 
@@ -130,7 +148,6 @@ int main(int argc, char *argv[]) {
   spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [thread %t] [%l] %v");
 
   // create the region
-  dormitoryIOT dormitory("dormitory614", "dormitory614_id", 100, 100);
   dormitory_setup(dormitory);
 
   // create all threads for the region
