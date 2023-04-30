@@ -109,46 +109,40 @@ public:
   void add_system(systemIOT *s) { systems.push_back(s); }
   void delete_system(systemIOT *s) { systems.remove(s); }
   void set_security_system(systemIOT *s) { security_system = s; }
+  systemIOT *get_security_system() { return security_system; }
+  systemIOT *update_security_system(systemIOT *s) {
+    return security_system = s;
+  }
   bool get_security_update() const { return has_security_update; }
+
+  virtual void region_thread(void *arg) = 0;
 };
 
 class dormitoryIOT : public region {
 
 private:
-  message_queue pub_topics;
-  message_queue sub_topics;
-  message_queue security_topics;
-
   static dormitoryIOT *instance;
 
-  dormitoryIOT(std::string region_name, std::string region_id, int pub_size,
-               int sub_size)
-      : region(region_name, region_id), pub_topics(pub_size),
-        sub_topics(sub_size), security_topics(sub_size / 2) {}
+  dormitoryIOT(std::string region_name, std::string region_id)
+      : region(region_name, region_id) {}
 
 public:
   dormitoryIOT *Getinstance(std::string region_name, std::string region_id,
                             int pub_size, int sub_size) {
     if (instance == nullptr) {
-      static dormitoryIOT diot(region_name, region_id, pub_size, sub_size);
+      static dormitoryIOT diot(region_name, region_id);
       instance = &diot;
       return instance;
     } else {
       return instance;
     }
   }
-
   void region_thread(void *arg) {
     // first, create a thread to handle the security system
     dormitoryIOT *dormitory = (dormitoryIOT *)arg;
 
     pthread_t security_thread_handler;
     pthread_create(&security_thread_handler, NULL, security_thread, dormitory);
-
-    // second, create a thread to handle the message
-    pthread_t message_thread_handler;
-    pthread_create(&message_thread_handler, NULL, handle_message_thread,
-                   dormitory);
 
     // fourth, create a thread to handle the control panel
     pthread_t control_panel_thread_handler;
@@ -283,13 +277,11 @@ public:
         led *lighting = dynamic_cast<led *>(device);
         spdlog::debug("turn on the light");
         auto m = lighting->set_desired_status("on");
-        dormitory->push_sub_message(m.get_data(), m.get_topic());
       } else {
         // turn off the light
         led *lighting = dynamic_cast<led *>(device);
         spdlog::debug("turn off the light");
         auto m = lighting->set_desired_status("off");
-        dormitory->push_sub_message(m.get_data(), m.get_topic());
       }
     }
     // turn on/off the light based on the motion sensor now the motion sensor
@@ -312,75 +304,10 @@ inline void security::control_panel(void *arg) {
   // now, the control panel is empty
 }
 
-void *handle_message_thread(void *arg) {
-
-  spdlog::debug("handle_message_thread start");
-
-  dormitoryIOT *dormitory = (dormitoryIOT *)arg;
-  auto pub_topics = dormitory->pub_topics;
-  auto sub_topics = dormitory->sub_topics;
-
-  while (true) {
-    if (!pub_topics.empty()) {
-      spdlog::debug("handle message thread->pub topics is not empty");
-      auto m = pub_topics.pop();
-      auto topic = m.get_topic();
-      auto data = m.get_data();
-      // must publish to device
-    }
-    if (!sub_topics.empty()) {
-      spdlog::debug("handle message thread->sub topics is not empty");
-      auto m = sub_topics.pop();
-      auto topic = m.get_topic();
-      auto data = m.get_data();
-      spdlog::debug("handle message thread->topic: {}, data: {}", topic, data);
-    }
-    sleep(1);
-  }
-}
-
-void *security_thread(void *arg) {
-
-  spdlog::debug("security_thread start");
-
-  dormitoryIOT *dormitory = (dormitoryIOT *)arg;
-  auto security_topics = dormitory->security_topics;
-  auto security_system = dormitory->security_system;
-
-  while (true) {
-    if (dormitory->get_has_security_update()) {
-      // update the security system
-      auto m = dormitory->pop_security_message();
-      auto topic = m.get_topic();
-      auto data = m.get_data();
-      // analyze the message and update the security system
-      spdlog::critical("security system update: topic: {}, data: {}", topic,
-                       data);
-    }
-    if (security_system == nullptr) {
-      spdlog::critical("security system is not initialized");
-    } else {
-      security_system->control_panel(dormitory);
-    }
-    usleep(100000);
-  }
-}
+void *security_thread(void *arg) { spdlog::debug("security_thread start"); }
 
 void *control_panel_thread(void *arg) {
-
   spdlog::debug("control_panel_thread start");
-
-  dormitoryIOT *dormitory = (dormitoryIOT *)arg;
-  // get all the systems except the security system
-  auto systems = dormitory->systems;
-
-  while (true) {
-    for (auto system : systems) {
-      system->control_panel(dormitory);
-    }
-    usleep(100);
-  }
-  return nullptr;
 }
 
 #endif
