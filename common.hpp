@@ -16,7 +16,6 @@ const std::string SEN_CLOUD_TOPIC{"SYS/dis/upload_records"};
 // declare functions
 void *control_panel_thread(void *arg);
 void *security_thread(void *arg);
-void *handle_message_thread(void *arg);
 
 class message {
   std::string data;
