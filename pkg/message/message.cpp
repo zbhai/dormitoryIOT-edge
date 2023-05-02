@@ -1,11 +1,11 @@
 #include "message.hpp"
-#include "common.hpp"
 
 enum Message {
   Lighting,
   Security,
 };
 
-void *Lighting(void *arg) {}
+// lighting handler handle the message from the lighting system
+void *lighting_handler(void *arg) {}
 
-void *Security(void *arg) {}
+void *security_handler(void *arg) {}

@@ -88,68 +88,6 @@ message EMPTY_MESSAGE("", "");
 // --------------MQ2---------------
 // the alarm status will be write to the device, if the nother things is occur.
 
-class systemIOT;
-
-class region {
-  std::string region_name;
-  std::string region_id;
-
-public:
-  std::list<systemIOT *> systems;
-  systemIOT *security_system;
-  bool has_security_update;
-
-  region(std::string region_name, std::string region_id)
-      : region_name(region_name), region_id(region_id),
-        has_security_update(false) {}
-  std::string get_region_name() const { return region_name; }
-  std::string get_region_id() const { return region_id; }
-  std::list<systemIOT *> get_systems() { return systems; }
-  void add_system(systemIOT *s) { systems.push_back(s); }
-  void delete_system(systemIOT *s) { systems.remove(s); }
-  void set_security_system(systemIOT *s) { security_system = s; }
-  systemIOT *get_security_system() { return security_system; }
-  systemIOT *update_security_system(systemIOT *s) {
-    return security_system = s;
-  }
-  bool get_security_update() const { return has_security_update; }
-
-  virtual void region_thread(void *arg) = 0;
-};
-
-class dormitoryIOT : public region {
-
-private:
-  static dormitoryIOT *instance;
-
-  dormitoryIOT(std::string region_name, std::string region_id)
-      : region(region_name, region_id) {}
-
-public:
-  dormitoryIOT *Getinstance(std::string region_name, std::string region_id,
-                            int pub_size, int sub_size) {
-    if (instance == nullptr) {
-      static dormitoryIOT diot(region_name, region_id);
-      instance = &diot;
-      return instance;
-    } else {
-      return instance;
-    }
-  }
-  void region_thread(void *arg) {
-    // first, create a thread to handle the security system
-    dormitoryIOT *dormitory = (dormitoryIOT *)arg;
-
-    pthread_t security_thread_handler;
-    pthread_create(&security_thread_handler, NULL, security_thread, dormitory);
-
-    // fourth, create a thread to handle the control panel
-    pthread_t control_panel_thread_handler;
-    pthread_create(&control_panel_thread_handler, NULL, control_panel_thread,
-                   dormitory);
-  }
-};
-
 class device {
   std::string device_name;
   std::string device_id;
@@ -238,7 +176,8 @@ public:
   void add_device(device *d) { devices.push_back(d); }
   void add_subsystem(systemIOT *s) { subsystems.push_back(s); }
   void add_related_system(systemIOT *s) { related_systems.push_back(s); }
-  virtual void control_panel(void *arg){}; // control the system
+  virtual void control_panel(void *arg){};      // control the system
+  virtual void *message_handler(void *arg) = 0; // message callback function
 };
 
 class lighting : public systemIOT {
@@ -253,40 +192,41 @@ public:
   void add_group(std::string group_name, std::list<device *> devices) {
     lighting_groups[group_name] = devices;
   }
-  inline void control_panel(void *arg) {
-    // get the dormitory
-    auto dormitory = (dormitoryIOT *)arg;
-
-    // turn on/off the light based on the time
-    auto origin_time = std::time(nullptr);
-    auto local_time = std::localtime(&origin_time);
-    auto hour = local_time->tm_hour;  // int
-    auto minute = local_time->tm_min; // int
-
-    // the time control panel is based on groups
-    // assert the lighting_groups is not empty
-    if (lighting_groups.empty()) {
-      return;
-    }
-    auto iter = lighting_groups.find("dormitory");
-    auto devices = iter->second;
-    for (auto device : devices) {
-      if (hour >= 23 || hour <= 6) {
-        // turn on the light
-        led *lighting = dynamic_cast<led *>(device);
-        spdlog::debug("turn on the light");
-        auto m = lighting->set_desired_status("on");
-      } else {
-        // turn off the light
-        led *lighting = dynamic_cast<led *>(device);
-        spdlog::debug("turn off the light");
-        auto m = lighting->set_desired_status("off");
-      }
-    }
-    // turn on/off the light based on the motion sensor now the motion sensor
-    // is empty
-  }
+  void control_panel(void *arg);
+  void *message_handler(void *arg);
 };
+void *lighting::message_handler(void *arg) { return nullptr; }
+void lighting::control_panel(void *arg) {
+  // get the dormitory
+  auto dormitory = (dormitoryIOT *)arg;
+
+  // turn on/off the light based on the time
+  auto origin_time = std::time(nullptr);
+  auto local_time = std::localtime(&origin_time);
+  auto hour = local_time->tm_hour;  // int
+  auto minute = local_time->tm_min; // int
+
+  // the time control panel is based on groups
+  // assert the lighting_groups is not empty
+  if (lighting_groups.empty()) {
+    return;
+  }
+  auto iter = lighting_groups.find("dormitory");
+  auto devices = iter->second;
+  for (auto device : devices) {
+    if (hour >= 23 || hour <= 6) {
+      // turn on the light
+      led *lighting = dynamic_cast<led *>(device);
+      spdlog::debug("turn on the light");
+      auto m = lighting->set_desired_status("on");
+    } else {
+      // turn off the light
+      led *lighting = dynamic_cast<led *>(device);
+      spdlog::debug("turn off the light");
+      auto m = lighting->set_desired_status("off");
+    }
+  }
+}
 
 class security : public systemIOT {
   std::string security_status;
@@ -297,16 +237,94 @@ public:
         security_status("no") {}
   std::string get_security_status() const { return security_status; }
   void control_panel(void *arg); // control the security system
+  void *message_handler(void *arg);
 };
-inline void security::control_panel(void *arg) {
-  // control the security system
-  // now, the control panel is empty
-}
+void security::control_panel(void *arg) {}
+void *security::message_handler(void *arg) { return nullptr; }
 
-void *security_thread(void *arg) { spdlog::debug("security_thread start"); }
+void *security_thread(void *arg) {
+  spdlog::debug("security_thread start");
+  return nullptr;
+}
 
 void *control_panel_thread(void *arg) {
   spdlog::debug("control_panel_thread start");
+  return nullptr;
 }
+
+class region {
+
+public:
+  std::list<systemIOT *> systems;
+  systemIOT *security_system;
+  bool has_security_update;
+
+public:
+  region(std::string region_name, std::string region_id)
+      : region_name(region_name), region_id(region_id),
+        has_security_update(false) {}
+  std::string get_region_name() const { return region_name; }
+  std::string get_region_id() const { return region_id; }
+  std::list<systemIOT *> get_systems() { return systems; }
+  void add_system(systemIOT *s) { systems.push_back(s); }
+  void delete_system(systemIOT *s) { systems.remove(s); }
+  void set_security_system(systemIOT *s) { security_system = s; }
+  systemIOT *get_security_system() { return security_system; }
+  systemIOT *update_security_system(systemIOT *s) {
+    return security_system = s;
+  }
+  bool get_security_update() const { return has_security_update; }
+  virtual void region_thread(void *arg) = 0;
+
+private:
+  std::string region_name;
+  std::string region_id;
+};
+
+class dormitoryIOT : public region {
+public:
+  static dormitoryIOT *GetInstance();
+  static void DeleteInstance();
+  void print();
+
+  void region_thread(void *arg);
+
+private:
+  dormitoryIOT(std::string region_name, std::string region_id);
+  ~dormitoryIOT();
+
+  dormitoryIOT(const dormitoryIOT &);
+  const dormitoryIOT &operator=(const dormitoryIOT &){};
+
+private:
+  static dormitoryIOT *instance;
+};
+dormitoryIOT *dormitoryIOT::instance =
+    new (std::nothrow) dormitoryIOT("dormitory", "dormitory");
+dormitoryIOT *dormitoryIOT::GetInstance() { return instance; }
+void dormitoryIOT::DeleteInstance() {
+  if (instance) {
+    delete instance;
+    instance = nullptr;
+  }
+}
+void dormitoryIOT::print() {
+  std::cout << "the instance address is:" << this << std::endl;
+}
+void dormitoryIOT::region_thread(void *arg) {
+  // first, create a thread to handle the security system
+  dormitoryIOT *dormitory = (dormitoryIOT *)arg;
+
+  pthread_t security_thread_handler;
+  pthread_create(&security_thread_handler, NULL, security_thread, dormitory);
+
+  // fourth, create a thread to handle the control panel
+  pthread_t control_panel_thread_handler;
+  pthread_create(&control_panel_thread_handler, NULL, control_panel_thread,
+                 dormitory);
+}
+dormitoryIOT::dormitoryIOT(std::string region_name, std::string region_id)
+    : region(region_name, region_id) {}
+dormitoryIOT::~dormitoryIOT() {}
 
 #endif

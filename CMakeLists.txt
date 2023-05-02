@@ -15,4 +15,11 @@ add_subdirectory(pkg/message)
 add_executable(app ${DIR_SRCS})
 
 # 添加链接库
-target_link_libraries(app message)
+target_link_libraries(app 
+message
+paho-mqtt3a
+paho-mqtt3as
+paho-mqtt3c
+paho-mqtt3cs
+paho-mqttpp3
+)

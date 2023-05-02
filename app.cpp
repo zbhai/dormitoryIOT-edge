@@ -26,88 +26,14 @@
 
 using namespace std;
 
-// create a dormitory region that will be used many threads
-dormitoryIOT dormitory("dormitory614", "dormitory614_id", 100, 100);
-// craete a mutex to protect the dormitory is right
-pthread_mutex_t dormitory_mutex;
-int is_intialized = 0;
-
-const int QOS = 1;
-
-/////////////////////////////////////////////////////////////////////////////
-
-void *mqtt_thread(void *arg) {
-
-  spdlog::debug("mqtt thread is running");
-  // get dormitory
-  auto dormitory = (dormitoryIOT *)arg;
-
-  // create the mqtt client
-  mqtt::async_client cli(SERVER_ADDRESS, CLIENT_ID);
-
-  auto connOpts =
-      mqtt::connect_options_builder().clean_session(false).finalize();
-
-  try {
-    // Start consumer before connecting to make sure to not miss messages
-
-    cli.start_consuming();
-
-    // Connect to the server
-    auto tok = cli.connect(connOpts);
-
-    // Getting the connect response will block waiting for the
-    // connection to complete.
-    auto rsp = tok->get_connect_response();
-
-    // If there is no session present, then we need to subscribe, but if
-    // there is a session, then the server remembers us and our
-    // subscriptions.
-    if (!rsp.is_session_present())
-      cli.subscribe(TOPIC, QOS)->wait();
-
-    // Consume messages
-    // This just exits if the client is disconnected.
-    // (See some other examples for auto or manual reconnect)
-
-    while (true) {
-      auto msg = cli.consume_message();
-      if (!msg)
-        break;
-      // add the message to the sub_topics queue
-      std::string data = static_cast<std::string>(msg->get_payload());
-      std::string topic = static_cast<std::string>(msg->get_topic());
-      dormitory->push_sub_message(data, topic);
-      // debug the message information
-    }
-
-    // If we're here, the client was almost certainly disconnected.
-    // But we check, just to make sure.
-
-    if (cli.is_connected()) {
-      cout << "\nShutting down and disconnecting from the MQTT server..."
-           << flush;
-      cli.unsubscribe(TOPIC)->wait();
-      cli.stop_consuming();
-      cli.disconnect()->wait();
-      cout << "OK" << endl;
-    } else {
-      cout << "\nClient was disconnected" << endl;
-    }
-  } catch (const mqtt::exception &exc) {
-    cerr << "\n  " << exc << endl;
-    exit(-1);
-  }
-
-  exit(0);
-}
+// declare the mqtt thread
+extern void *mqtt_thread(void *arg);
 
 // the function setup the dormitory region
 // setup the dormitory region,
-void dormitory_setup(dormitoryIOT &dormitory) {
+void dormitory_setup(void) {
 
-  pthread_mutex_init(&dormitory_mutex, NULL);
-  is_intialized = 1;
+  auto dormitory = dormitoryIOT::get_instance();
 
   // create systems belong to the region
   lighting lighting_led("led", "led_id", true);
@@ -123,22 +49,14 @@ void dormitory_setup(dormitoryIOT &dormitory) {
   security_smoke.add_device(&mq2_1);
 
   // add the systems to the region
-  dormitory.add_system(&lighting_led);
-  dormitory.add_system(&security_smoke);
-  dormitory.set_security_system(&security_smoke);
+  dormitory->add_system(&lighting_led);
+  dormitory->add_system(&security_smoke);
+  dormitory->set_security_system(&security_smoke);
 
   // set the lighting system groups
   auto devices = list<device *>{&led1};
   lighting_led.add_group("dormitory", devices);
 }
-
-int dormitory_lock() { return pthread_mutex_lock(&dormitory_mutex); }
-
-int dormitory_unlock() { return pthread_mutex_unlock(&dormitory_mutex); }
-
-int dormitory_try_lock() { return pthread_mutex_trylock(&dormitory_mutex); }
-
-int dormitory_is_initialized() { return is_intialized; }
 
 // the thread create a reagion and handle the message from the reagion
 int main(int argc, char *argv[]) {
@@ -148,10 +66,13 @@ int main(int argc, char *argv[]) {
   spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [thread %t] [%l] %v");
 
   // create the region
-  dormitory_setup(dormitory);
+  dormitory_setup();
+
+  // get the region
+  auto dormitory = dormitoryIOT::get_instance();
 
   // create all threads for the region
-  dormitory.region_thread(&dormitory);
+  dormitory->region_thread(&dormitory);
 
   // the main thread is not exit, because it create three thread belong to
   // dormitory
