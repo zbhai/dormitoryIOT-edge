@@ -22,7 +22,8 @@
 #include <string>
 #include <thread>
 
-#include "common.hpp"
+#include "dormitory.hpp"
+#include "mqtt.hpp"
 
 using namespace std;
 
@@ -33,7 +34,7 @@ extern void *mqtt_thread(void *arg);
 // setup the dormitory region,
 void dormitory_setup(void) {
 
-  auto dormitory = dormitoryIOT::get_instance();
+  auto dormitory = dormitoryIOT::GetInstance();
 
   // create systems belong to the region
   lighting lighting_led("led", "led_id", true);
@@ -69,7 +70,7 @@ int main(int argc, char *argv[]) {
   dormitory_setup();
 
   // get the region
-  auto dormitory = dormitoryIOT::get_instance();
+  auto dormitory = dormitoryIOT::GetInstance();
 
   // create all threads for the region
   dormitory->region_thread(&dormitory);

@@ -41,9 +41,13 @@
 
 #include "mqtt.hpp"
 
-const std::string SERVER_ADDRESS("tcp://localhost:1883");
-const std::string CLIENT_ID("paho_cpp_async_subcribe");
-const std::string TOPIC("hello");
+const std::string SERVER_ADDRESS("localhost:1883");
+
+const std::string CLIENT_ID{"dormitoryIOT"};
+const std::string TOPIC{"dormitoryIOT/test"};
+const std::string REC_DEVICE_TOPIC{"$ke/events/device/+/data/update"};
+const std::string SEN_DEVICE_TOPIC{"$hw/events/device/+/twin/update/delta"};
+const std::string SEN_CLOUD_TOPIC{"SYS/dis/upload_records"};
 
 const int QOS = 1;
 const int N_RETRY_ATTEMPTS = 5;
@@ -194,6 +198,8 @@ void *mqtt_thread(void *arg) {
   }
 
   // Just block till user tells us to quit.
+  while (1) {
+  }
 
   // Disconnect
   try {

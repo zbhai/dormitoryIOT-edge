@@ -1,17 +1,10 @@
-#ifndef __COMMON_H__
-#define __COMMON_H__
+#ifndef __DORMITORY_HPP__
+#define __DORMITORY_HPP__
 
 #include "mqtt/async_client.h"
 #include "pthread.h"
 #include "spdlog/spdlog.h"
 #include <list>
-
-const std::string SERVER_ADDRESS{"localhost:1883"};
-const std::string CLIENT_ID{"dormitoryIOT"};
-const std::string TOPIC{"dormitoryIOT/test"};
-const std::string REC_DEVICE_TOPIC{"$ke/events/device/+/data/update"};
-const std::string SEN_DEVICE_TOPIC{"$hw/events/device/+/twin/update/delta"};
-const std::string SEN_CLOUD_TOPIC{"SYS/dis/upload_records"};
 
 // declare functions
 void *control_panel_thread(void *arg);
@@ -100,60 +93,6 @@ public:
   virtual bool synced() = 0;
 };
 
-class led : public device {
-  std::string status;
-  std::string desired_status;
-  uint8_t pin_number;
-
-public:
-  led(std::string device_name, std::string device_id, std::string status,
-      uint8_t pin_number)
-      : device(device_name, device_id), status(status), pin_number(pin_number) {
-  }
-  std::string get_status() const { return status; }
-  message set_desired_status(
-      std::string desired); // create a task and be executed later
-  bool synced() { return status == desired_status; }
-};
-inline message led::set_desired_status(std::string desired) {
-  // create a message and push to the message queue
-  std::string topic(SEN_DEVICE_TOPIC);
-  topic.replace(topic.find("+"), 1, "device_id");
-  return message(desired, topic);
-}
-
-class dth11 : public device {
-  uint8_t temperature;
-  uint8_t humidity;
-
-public:
-  dth11(std::string device_name, std::string device_id, uint8_t temperature,
-        uint8_t humidity)
-      : device(device_name, device_id), temperature(temperature),
-        humidity(humidity) {}
-  uint8_t get_temporary() const { return temperature; }
-  uint8_t get_humidity() const { return humidity; }
-  bool synced() { return true; }
-};
-
-class mq2 : public device {
-  uint8_t smoke_value;
-  std::string alarm_status;
-  std::string desired_alarm_status;
-
-public:
-  mq2(std::string device_name, std::string device_id, uint8_t smoke_value,
-      std::string alarm_status)
-      : device(device_name, device_id), smoke_value(smoke_value),
-        alarm_status(alarm_status) {}
-  uint8_t get_smoke_value() const { return smoke_value; }
-  std::string get_alarm_status() const { return alarm_status; }
-  void set_desired_alarm_status(std::string desired) const {
-    return;
-  } // create a task and be executed later
-  bool synced() { return alarm_status == desired_alarm_status; }
-};
-
 class systemIOT {
   bool is_basic_system;
   std::string system_name;
@@ -179,78 +118,6 @@ public:
   virtual void control_panel(void *arg){};      // control the system
   virtual void *message_handler(void *arg) = 0; // message callback function
 };
-
-class lighting : public systemIOT {
-  std::map<std::string, std::list<device *>> lighting_groups;
-
-public:
-  lighting(std::string system_name, std::string system_id, bool is_basic_system)
-      : systemIOT(system_name, system_id, is_basic_system) {}
-  std::map<std::string, std::list<device *>> get_groups() const {
-    return lighting_groups;
-  }
-  void add_group(std::string group_name, std::list<device *> devices) {
-    lighting_groups[group_name] = devices;
-  }
-  void control_panel(void *arg);
-  void *message_handler(void *arg);
-};
-void *lighting::message_handler(void *arg) { return nullptr; }
-void lighting::control_panel(void *arg) {
-  // get the dormitory
-  auto dormitory = (dormitoryIOT *)arg;
-
-  // turn on/off the light based on the time
-  auto origin_time = std::time(nullptr);
-  auto local_time = std::localtime(&origin_time);
-  auto hour = local_time->tm_hour;  // int
-  auto minute = local_time->tm_min; // int
-
-  // the time control panel is based on groups
-  // assert the lighting_groups is not empty
-  if (lighting_groups.empty()) {
-    return;
-  }
-  auto iter = lighting_groups.find("dormitory");
-  auto devices = iter->second;
-  for (auto device : devices) {
-    if (hour >= 23 || hour <= 6) {
-      // turn on the light
-      led *lighting = dynamic_cast<led *>(device);
-      spdlog::debug("turn on the light");
-      auto m = lighting->set_desired_status("on");
-    } else {
-      // turn off the light
-      led *lighting = dynamic_cast<led *>(device);
-      spdlog::debug("turn off the light");
-      auto m = lighting->set_desired_status("off");
-    }
-  }
-}
-
-class security : public systemIOT {
-  std::string security_status;
-
-public:
-  security(std::string system_name, std::string system_id, bool is_basic_system)
-      : systemIOT(system_name, system_id, is_basic_system),
-        security_status("no") {}
-  std::string get_security_status() const { return security_status; }
-  void control_panel(void *arg); // control the security system
-  void *message_handler(void *arg);
-};
-void security::control_panel(void *arg) {}
-void *security::message_handler(void *arg) { return nullptr; }
-
-void *security_thread(void *arg) {
-  spdlog::debug("security_thread start");
-  return nullptr;
-}
-
-void *control_panel_thread(void *arg) {
-  spdlog::debug("control_panel_thread start");
-  return nullptr;
-}
 
 class region {
 
@@ -326,5 +193,131 @@ void dormitoryIOT::region_thread(void *arg) {
 dormitoryIOT::dormitoryIOT(std::string region_name, std::string region_id)
     : region(region_name, region_id) {}
 dormitoryIOT::~dormitoryIOT() {}
+
+class led : public device {
+  std::string status;
+  std::string desired_status;
+  uint8_t pin_number;
+
+public:
+  led(std::string device_name, std::string device_id, std::string status,
+      uint8_t pin_number)
+      : device(device_name, device_id), status(status), pin_number(pin_number) {
+  }
+  std::string get_status() const { return status; }
+  message set_desired_status(
+      std::string desired); // create a task and be executed later
+  bool synced() { return status == desired_status; }
+};
+inline message led::set_desired_status(std::string desired) {
+  // create a message and push to the message queue
+  std::string topic("device/+/led");
+  topic.replace(topic.find("+"), 1, "device_id");
+  return message(desired, topic);
+}
+
+class dth11 : public device {
+  uint8_t temperature;
+  uint8_t humidity;
+
+public:
+  dth11(std::string device_name, std::string device_id, uint8_t temperature,
+        uint8_t humidity)
+      : device(device_name, device_id), temperature(temperature),
+        humidity(humidity) {}
+  uint8_t get_temporary() const { return temperature; }
+  uint8_t get_humidity() const { return humidity; }
+  bool synced() { return true; }
+};
+
+class mq2 : public device {
+  uint8_t smoke_value;
+  std::string alarm_status;
+  std::string desired_alarm_status;
+
+public:
+  mq2(std::string device_name, std::string device_id, uint8_t smoke_value,
+      std::string alarm_status)
+      : device(device_name, device_id), smoke_value(smoke_value),
+        alarm_status(alarm_status) {}
+  uint8_t get_smoke_value() const { return smoke_value; }
+  std::string get_alarm_status() const { return alarm_status; }
+  void set_desired_alarm_status(std::string desired) const {
+    return;
+  } // create a task and be executed later
+  bool synced() { return alarm_status == desired_alarm_status; }
+};
+
+class lighting : public systemIOT {
+  std::map<std::string, std::list<device *>> lighting_groups;
+
+public:
+  lighting(std::string system_name, std::string system_id, bool is_basic_system)
+      : systemIOT(system_name, system_id, is_basic_system) {}
+  std::map<std::string, std::list<device *>> get_groups() const {
+    return lighting_groups;
+  }
+  void add_group(std::string group_name, std::list<device *> devices) {
+    lighting_groups[group_name] = devices;
+  }
+  void control_panel(void *arg);
+  void *message_handler(void *arg);
+};
+void *lighting::message_handler(void *arg) { return nullptr; }
+void lighting::control_panel(void *arg) {
+  // get the dormitory
+  auto dormitory = dormitoryIOT::GetInstance();
+
+  // turn on/off the light based on the time
+  auto origin_time = std::time(nullptr);
+  auto local_time = std::localtime(&origin_time);
+  auto hour = local_time->tm_hour;  // int
+  auto minute = local_time->tm_min; // int
+
+  // the time control panel is based on groups
+  // assert the lighting_groups is not empty
+  if (lighting_groups.empty()) {
+    return;
+  }
+  auto iter = lighting_groups.find("dormitory");
+  auto devices = iter->second;
+  for (auto device : devices) {
+    if (hour >= 23 || hour <= 6) {
+      // turn on the light
+      led *lighting = dynamic_cast<led *>(device);
+      spdlog::debug("turn on the light");
+      auto m = lighting->set_desired_status("on");
+    } else {
+      // turn off the light
+      led *lighting = dynamic_cast<led *>(device);
+      spdlog::debug("turn off the light");
+      auto m = lighting->set_desired_status("off");
+    }
+  }
+}
+
+class security : public systemIOT {
+  std::string security_status;
+
+public:
+  security(std::string system_name, std::string system_id, bool is_basic_system)
+      : systemIOT(system_name, system_id, is_basic_system),
+        security_status("no") {}
+  std::string get_security_status() const { return security_status; }
+  void control_panel(void *arg); // control the security system
+  void *message_handler(void *arg);
+};
+void security::control_panel(void *arg) {}
+void *security::message_handler(void *arg) { return nullptr; }
+
+void *security_thread(void *arg) {
+  spdlog::debug("security_thread start");
+  return nullptr;
+}
+
+void *control_panel_thread(void *arg) {
+  spdlog::debug("control_panel_thread start");
+  return nullptr;
+}
 
 #endif
