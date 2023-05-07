@@ -1,6 +1,11 @@
 #ifndef __MESSAGE_HPP__
 #define __MESSAGE_HPP__
 
+#include "mqtt/async_client.h"
+#include "pthread.h"
+#include "spdlog/spdlog.h"
+#include <list>
+
 #include <tuple>
 namespace Cosmos {
 namespace details {
@@ -58,5 +63,40 @@ auto Apply(F &&f, Args &&...args) -> decltype(f(args...)) {
   return std::forward<F>(f)(std::forward<Args>(args)...);
 }
 } // namespace Cosmos
+
+enum {
+  MESSAGE_SECURITY,
+  MESSAGE_LIGHTING,
+};
+
+class message {
+  std::string data;
+  std::string topic;
+  int m_type;
+
+public:
+  message(const std::string &data, const std::string &topic)
+      : data(data), topic(topic) {}
+  std::string get_data() const { return data; }
+  std::string get_topic() const { return topic; }
+};
+
+class message_queue {
+  std::list<message> messages;
+  int length;
+  int max_size;
+
+  pthread_mutex_t mutex;
+
+public:
+  message_queue(int max_size) : messages(), length(0), max_size(max_size) {
+    pthread_mutex_init(&mutex, NULL);
+  }
+  ~message_queue() { pthread_mutex_destroy(&mutex); }
+  int push(std::string &data, std::string &topic);
+  message pop();
+  bool empty() { return messages.empty(); }
+  int size() { return messages.size(); }
+};
 
 #endif // __MESSAGE_HPP__

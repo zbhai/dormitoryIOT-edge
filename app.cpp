@@ -22,8 +22,10 @@
 #include <string>
 #include <thread>
 
-#include "dormitory.hpp"
-#include "mqtt.hpp"
+#include "pkg/message/dormitory.hpp"
+#include "pkg/message/message.hpp"
+#include "pkg/message/mqtt.hpp"
+#include "pkg/message/threadpool.hpp"
 
 using namespace std;
 

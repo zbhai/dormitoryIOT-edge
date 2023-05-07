@@ -1,2 +1,6 @@
 #!/bin/bash
 mosquitto_pub -h localhost -t "dormitoryIOT/test" -i "pub_test" -m "Hello World!"
+
+mosquitto_pub -h localhost -t "ke/events/device/lighting_led/data/update" -i "pub_test" -m "led device data!"
+
+
