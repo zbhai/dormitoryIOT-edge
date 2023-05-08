@@ -31,13 +31,15 @@ message message_queue::pop() {
   return m;
 }
 
-// message module initialization function
-template <int key, typename R, typename... Args> R Dispatch(Args... args) {
-  auto m_type =
-      std::make_tuple(MESSAGE_LIGHTING, MESSAGE_SECURITY); ///< 消息类型 tuple
-  auto i_type = std::make_tuple(lighting::message_handler,
-                                security::message_handler); ///< 处理函数 tuple
-  auto m_dis = Cosmos::Zip(m_type, i_type);                 ///< 合并二者
+// // message module initialization function
+// template <int key, typename R, typename... Args> R Dispatch(Args... args) {
+//   auto m_type =
+//       std::make_tuple(MESSAGE_LIGHTING, MESSAGE_SECURITY); ///< 消息类型
+//       tuple
+//   auto i_type = std::make_tuple(lighting_message_handler,
+//                                 security_message_handler); ///< 处理函数
+//                                 tuple
+//   auto m_dis = Cosmos::Zip(m_type, i_type);                ///< 合并二者
 
-  return Cosmos::Apply(std::get<key>(m_dis).second, args...);
-}
+//   return Cosmos::Apply(std::get<key>(m_dis).second, args...);
+// }

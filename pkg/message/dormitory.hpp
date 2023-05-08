@@ -7,6 +7,7 @@
 #include <list>
 
 #include "message.hpp"
+#include "mqtt.hpp"
 #include "threadpool.hpp"
 
 // define the device message model
@@ -48,51 +49,70 @@ class systemIOT {
   bool is_basic_system;
   std::string system_name;
   std::string system_id;
+
   std::list<device *> devices;
   std::list<systemIOT *> subsystems;
   std::list<systemIOT *> related_systems;
+
+  pthread_rwlock_t device_lock;
+  pthread_rwlock_t subsystem_lock;
+  pthread_rwlock_t related_system_lock;
 
 public:
   systemIOT(std::string system_name, std::string system_id,
             bool is_basic_system)
       : system_name(system_name), system_id(system_id),
-        is_basic_system(is_basic_system) {}
-  std::string get_name() const { return system_name; }
-  std::string get_id() const { return system_id; }
-  bool is_basic() const { return is_basic_system; }
-  std::list<device *> get_devices() const { return devices; }
-  std::list<systemIOT *> get_subsystems() const { return subsystems; }
-  std::list<systemIOT *> get_related_systems() const { return related_systems; }
-  void add_device(device *d) { devices.push_back(d); }
-  void add_subsystem(systemIOT *s) { subsystems.push_back(s); }
-  void add_related_system(systemIOT *s) { related_systems.push_back(s); }
-  virtual void control_panel(void *arg){};     // control the system
-  void message_handler(void *arg) { return; }; // message callback function
+        is_basic_system(is_basic_system) {
+    pthread_rwlock_init(&device_lock, NULL);
+    pthread_rwlock_init(&subsystem_lock, NULL);
+    pthread_rwlock_init(&related_system_lock, NULL);
+  }
+  std::string get_name() { return system_name; }
+  std::string get_id() {
+    spdlog::debug("system get id location01");
+    std::string temp("lighting");
+    spdlog::debug("system get id location02");
+    return temp;
+  }
+  bool is_basic() { return is_basic_system; }
+
+  device *get_device(std::string);
+  void add_device(device *d);
+
+  systemIOT *get_subsystem(std::string);
+  void add_subsystem(systemIOT *s);
+
+  systemIOT *get_related_system(std::string);
+  void add_related_system(systemIOT *s);
+
+  virtual void control_panel(void *arg) = 0; // control the system
 };
 
 class region {
-public:
+private:
   std::list<systemIOT *> systems;
   systemIOT *security_system;
-  bool has_security_update;
+
+  pthread_rwlock_t system_lock;
+  pthread_rwlock_t security_system_lock;
 
 public:
   region(std::string region_name, std::string region_id)
-      : region_name(region_name), region_id(region_id),
-        has_security_update(false) {}
-  std::string get_region_name() const { return region_name; }
-  std::string get_region_id() const { return region_id; }
-  std::list<systemIOT *> get_systems() { return systems; }
-  systemIOT *get_system();
-  void add_system(systemIOT *s) { systems.push_back(s); }
-  void delete_system(systemIOT *s) { systems.remove(s); }
-  void set_security_system(systemIOT *s) { security_system = s; }
-  systemIOT *get_security_system() { return security_system; }
-  systemIOT *update_security_system(systemIOT *s) {
-    return security_system = s;
+      : region_name(region_name), region_id(region_id) {
+    pthread_rwlock_init(&system_lock, NULL);
+    pthread_rwlock_init(&security_system_lock, NULL);
   }
 
-  bool get_security_update() const { return has_security_update; }
+  std::string get_region_name() const { return region_name; }
+  std::string get_region_id() const { return region_id; }
+
+  systemIOT *get_system(std::string);
+  void add_system(systemIOT *s);
+  void delete_system(systemIOT *s);
+
+  systemIOT *get_security_system();
+  systemIOT *update_security_system(systemIOT *s);
+
   virtual void region_thread(void *arg) = 0;
 
 private:
@@ -105,29 +125,44 @@ class led : public device {
   std::string desired_status;
   uint8_t pin_number;
 
+  pthread_rwlock_t ledlock;
+
 public:
   led(std::string device_name, std::string device_id, std::string status,
       uint8_t pin_number)
       : device(device_name, device_id), status(status), pin_number(pin_number) {
+    pthread_rwlock_init(&ledlock, NULL);
   }
-  std::string get_status() const { return status; }
+  std::string get_status();
   message set_desired_status(
       std::string desired); // create a task and be executed later
-  bool synced() { return status == desired_status; }
+  bool synced();
+
+private:
+  void set_status(std::string status);
+  void get_desired_status(std::string desired_status);
 };
 
 class dth11 : public device {
   uint8_t temperature;
   uint8_t humidity;
 
+  pthread_rwlock_t dth11lock;
+
 public:
   dth11(std::string device_name, std::string device_id, uint8_t temperature,
         uint8_t humidity)
       : device(device_name, device_id), temperature(temperature),
-        humidity(humidity) {}
-  uint8_t get_temporary() const { return temperature; }
-  uint8_t get_humidity() const { return humidity; }
-  bool synced() { return true; }
+        humidity(humidity) {
+    pthread_rwlock_init(&dth11lock, NULL);
+  }
+  uint8_t get_temperature();
+  uint8_t get_humidity();
+  bool synced();
+
+private:
+  void set_temperature(uint8_t temperature);
+  void set_humidity(uint8_t humidity);
 };
 
 class mq2 : public device {
@@ -135,45 +170,59 @@ class mq2 : public device {
   std::string alarm_status;
   std::string desired_alarm_status;
 
+  pthread_rwlock_t mq2lock;
+
 public:
   mq2(std::string device_name, std::string device_id, uint8_t smoke_value,
       std::string alarm_status)
       : device(device_name, device_id), smoke_value(smoke_value),
-        alarm_status(alarm_status) {}
-  uint8_t get_smoke_value() const { return smoke_value; }
-  std::string get_alarm_status() const { return alarm_status; }
-  void set_desired_alarm_status(std::string desired) const {
-    return;
-  } // create a task and be executed later
-  bool synced() { return alarm_status == desired_alarm_status; }
+        alarm_status(alarm_status) {
+    pthread_rwlock_init(&mq2lock, NULL);
+  }
+  uint8_t get_smoke_value();
+  std::string get_alarm_status();
+  void set_desired_alarm_status(std::string desired);
+  bool synced();
+
+private:
+  void set_smoke_value(uint8_t smoke_value);
+  void set_alarm_status(std::string alarm_status);
+  void get_desired_alarm_status(std::string desired_alarm_status);
 };
 
 class lighting : public systemIOT {
   std::map<std::string, std::list<device *>> lighting_groups;
 
+  pthread_rwlock_t lighting_groups_lock;
+
 public:
   lighting(std::string system_name, std::string system_id, bool is_basic_system)
-      : systemIOT(system_name, system_id, is_basic_system) {}
-  std::map<std::string, std::list<device *>> get_groups() const {
-    return lighting_groups;
+      : systemIOT(system_name, system_id, is_basic_system) {
+    pthread_rwlock_init(&lighting_groups_lock, NULL);
   }
-  void add_group(std::string group_name, std::list<device *> devices) {
-    lighting_groups[group_name] = devices;
-  }
+
+  std::list<device *> get_group(std::string group_name);
+  void add_group(std::string group_name, std::list<device *> devices);
   void control_panel(void *arg);
-  static void message_handler(void *arg);
 };
 
 class security : public systemIOT {
   std::string security_status;
 
+  pthread_rwlock_t security_status_lock;
+
 public:
   security(std::string system_name, std::string system_id, bool is_basic_system)
       : systemIOT(system_name, system_id, is_basic_system),
-        security_status("no") {}
-  std::string get_security_status() const { return security_status; }
+        security_status("no") {
+    pthread_rwlock_init(&security_status_lock, NULL);
+  }
+  std::string get_security_status();
+
   void control_panel(void *arg); // control the security system
-  static void message_handler(void *arg);
+
+private:
+  void set_security_status(std::string security_status);
 };
 
 class dormitoryIOT : public region {
@@ -186,7 +235,6 @@ public:
   void print();
 
   void region_thread(void *arg);
-  systemIOT *get_system(std::string system_id);
 
 private:
   dormitoryIOT(std::string region_name, std::string region_id);

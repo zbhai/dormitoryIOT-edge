@@ -39,7 +39,7 @@ void dormitory_setup(void) {
   auto dormitory = dormitoryIOT::GetInstance();
 
   // create systems belong to the region
-  lighting lighting_led("led", "led_id", true);
+  lighting lighting_led("lighting", "lighting", true);
   security security_smoke("smoke", "smoke_id", true);
   // create the devices belong to this systems
   led led1("led1", "led1_id", "off", 0);
@@ -54,11 +54,11 @@ void dormitory_setup(void) {
   // add the systems to the region
   dormitory->add_system(&lighting_led);
   dormitory->add_system(&security_smoke);
-  dormitory->set_security_system(&security_smoke);
+  dormitory->update_security_system(&security_smoke);
 
   // set the lighting system groups
   auto devices = list<device *>{&led1};
-  lighting_led.add_group("dormitory", devices);
+  lighting_led.add_group("lighting", devices);
 }
 
 // the thread create a reagion and handle the message from the reagion
@@ -86,6 +86,6 @@ int main(int argc, char *argv[]) {
 
   while (true) {
     spdlog::debug("main thread is running");
-    usleep(1000000);
+    usleep(10000000);
   }
 }
