@@ -5,7 +5,25 @@
 message_queue lighting_queue(50);
 message_queue security_queue(10);
 
+/* implement the device method */
+std::string device::get_name(){
+  return device_name;
+}
+std::string device::get_id(){
+  return device_id;
+}
+
+
 /* implement systemIOT method */
+std::string systemIOT::get_name(){
+  return system_name;
+}
+std::string systemIOT::get_id(){
+  return system_id;
+}
+bool systemIOT::is_basic(){
+  return is_basic_system;
+}
 device *systemIOT::get_device(std::string device_id) {
   device *d = NULL;
 
@@ -47,6 +65,13 @@ void systemIOT::add_subsystem(systemIOT *s) {
 }
 
 /* implement the region method */
+
+std::string region::get_name(){
+  return region_name;
+}
+std::string region::get_id(){
+  return region_id;
+}
 systemIOT *systemIOT::get_related_system(std::string related_system_id) {
   systemIOT *s = NULL;
 
@@ -69,17 +94,12 @@ void systemIOT::add_related_system(systemIOT *s) {
 
 systemIOT *region::get_system(std::string system_id) {
   pthread_rwlock_rdlock(&system_lock);
-  spdlog::debug("region get system location00");
   for (auto it = systems.begin(); it != systems.end(); it++) {
-    if ((*it)->get_id() == system_id,
-        spdlog::debug("region get system location0.5"),
-        (*it)->get_id() == system_id) {
-      spdlog::debug("region get system location01");
+    if ((*it)->get_id() == system_id) {
       pthread_rwlock_unlock(&system_lock);
       return *it;
     }
   }
-  spdlog::debug("region get system location02");
   pthread_rwlock_unlock(&system_lock);
   return NULL;
 }
@@ -232,11 +252,13 @@ void security::set_security_status(std::string security_status) {
 }
 void security::control_panel(void *arg) {
   auto dormitory = dormitoryIOT::GetInstance();
+  spdlog::debug("{}", static_cast<void *>(dormitory));
+
   static int task_flag = 0;
 
   if (!task_flag) {
     // create a task to handle the message
-    Task Task(security_message_handler, nullptr);
+    Task Task(security_message_handler, &security_queue);
     dormitory->pool.addTask(Task);
     task_flag = 1;
   }
@@ -250,7 +272,11 @@ void lighting_message_handler(void *arg) {
     if (!m_queue.empty()) {
       message m = m_queue.pop();
       if (m.get_topic() == "lighting") {
-        spdlog::debug("lighting message: {}", m.get_data());
+        spdlog::debug("lighting message branch1: {}", m.get_data());
+      }
+      else if(m.get_topic().find("lighting") != m.get_topic().npos)
+      {
+        spdlog::debug("lighting message branch2: {}", m.get_data());
       }
     }
     usleep(1000);
@@ -273,12 +299,13 @@ void lighting::add_group(std::string group_name, std::list<device *> devices) {
 void lighting::control_panel(void *arg) {
   // get the dormitory
   auto dormitory = dormitoryIOT::GetInstance();
+  spdlog::debug("{}", static_cast<void *>(dormitory));
+
   static int task_flag = 0;
 
-  spdlog::debug("lighting control panel location01");
   if (!task_flag) {
     // create a task to handle the message
-    Task Task(lighting_message_handler, nullptr);
+    Task Task(lighting_message_handler, &lighting_queue);
     dormitory->pool.addTask(Task);
     task_flag = 1;
   }
@@ -287,7 +314,7 @@ void lighting::control_panel(void *arg) {
   auto origin_time = std::time(nullptr);
   auto local_time = std::localtime(&origin_time);
   auto hour = local_time->tm_hour;  // int
-  auto minute = local_time->tm_min; // int
+  
 
   // the time control panel is based on groups
   // assert the lighting_groups is not empty
@@ -295,6 +322,10 @@ void lighting::control_panel(void *arg) {
     return;
   }
   auto iter = lighting_groups.find("dormitory");
+  // if the target group is not found, then return
+  if (iter == lighting_groups.end()) {
+    return;
+  }
   auto devices = iter->second;
   for (auto device : devices) {
     if (hour >= 23 || hour <= 6) {
@@ -338,7 +369,7 @@ void dormitoryIOT::region_thread(void *arg) {
 }
 
 dormitoryIOT::dormitoryIOT(std::string region_name, std::string region_id)
-    : pool(1, 4), region(region_name, region_id) {}
+    : region(region_name, region_id), pool(1, 4) {}
 dormitoryIOT::~dormitoryIOT() {}
 
 /* implement region task */
@@ -350,7 +381,8 @@ void *security_thread(void *arg) {
 void *control_panel_thread(void *arg) {
   spdlog::debug("control_panel_thread start");
   auto dormitory = dormitoryIOT::GetInstance();
-
+  spdlog::debug("{}", static_cast<void *>(dormitory));
+  
   while (true) {
     spdlog::debug("control_panel_thread location01");
     // get the lighting system

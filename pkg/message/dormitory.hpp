@@ -40,15 +40,17 @@ class device {
 public:
   device(std::string device_name, std::string device_id)
       : device_name(device_name), device_id(device_id) {}
-  std::string get_name() const { return device_name; }
-  std::string get_id() const { return device_id; }
+  std::string get_name();
+  std::string get_id();
   virtual bool synced() = 0;
 };
 
 class systemIOT {
-  bool is_basic_system;
+private:
   std::string system_name;
   std::string system_id;
+
+   bool is_basic_system;
 
   std::list<device *> devices;
   std::list<systemIOT *> subsystems;
@@ -67,14 +69,9 @@ public:
     pthread_rwlock_init(&subsystem_lock, NULL);
     pthread_rwlock_init(&related_system_lock, NULL);
   }
-  std::string get_name() { return system_name; }
-  std::string get_id() {
-    spdlog::debug("system get id location01");
-    std::string temp("lighting");
-    spdlog::debug("system get id location02");
-    return temp;
-  }
-  bool is_basic() { return is_basic_system; }
+  std::string get_name();
+  std::string get_id();
+  bool is_basic();
 
   device *get_device(std::string);
   void add_device(device *d);
@@ -87,6 +84,7 @@ public:
 
   virtual void control_panel(void *arg) = 0; // control the system
 };
+
 
 class region {
 private:
@@ -103,8 +101,8 @@ public:
     pthread_rwlock_init(&security_system_lock, NULL);
   }
 
-  std::string get_region_name() const { return region_name; }
-  std::string get_region_id() const { return region_id; }
+  std::string get_name();
+  std::string get_id();
 
   systemIOT *get_system(std::string);
   void add_system(systemIOT *s);
@@ -119,6 +117,7 @@ private:
   std::string region_name;
   std::string region_id;
 };
+
 
 class led : public device {
   std::string status;

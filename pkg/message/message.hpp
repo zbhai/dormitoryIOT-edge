@@ -89,14 +89,14 @@ class message_queue {
   pthread_mutex_t mutex;
 
 public:
-  message_queue(int max_size) : messages(), length(0), max_size(max_size) {
+  message_queue(int max_size) :  length(0), max_size(max_size) {
     pthread_mutex_init(&mutex, NULL);
   }
   ~message_queue() { pthread_mutex_destroy(&mutex); }
   int push(std::string &data, std::string &topic);
   message pop();
-  bool empty() { return messages.empty(); }
-  int size() { return messages.size(); }
+  bool empty() { return (length != 0); }
+  int size() { return length; }
 };
 
 #endif // __MESSAGE_HPP__
