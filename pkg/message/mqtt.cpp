@@ -56,8 +56,8 @@ const std::string SEN_CLOUD_TOPIC{"SYS/dis/upload_records"};
 const int QOS = 1;
 const int N_RETRY_ATTEMPTS = 5;
 
-rigtorp::MPMCQueue<message> lighting_queue(MAX_LIGHTING_QUEUE_SIZE);
-rigtorp::MPMCQueue<message> security_queue(MAX_SECURITY_QUEUE_SIZE);
+extern rigtorp::MPMCQueue<message> lighting_queue;
+extern rigtorp::MPMCQueue<message> security_queue;
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -171,13 +171,22 @@ class callback : public virtual mqtt::callback,
     // prehandle the message and pass to the message dispatcher
     std::string topic = msg->get_topic();
     std::string data = msg->get_payload_str();
-    auto topic_elem = split(topic, '/');
-    std::string device = topic_elem[4];
-    int index = device.find("lighting");
+    // auto topic_elem = split(topic, '/');
+    // std::string device = topic_elem[3];
+    // int index = device.find("lighting");
+    int index = topic.find("lighting");
     if (index > 0) {
-      lighting_queue.try_emplace(data, topic);
+      bool ret = lighting_queue.try_emplace(data, topic);
+      if(ret != true)
+      {
+        spdlog::debug("message_arrived lighting queue try emplace error!\n\r");
+      }
+      else
+      {
+        spdlog::debug("message_arrived lighting queue try emplace success!\n\r");
+      }
     }
-    index = device.find("security");
+    index = topic.find("security");
     if (index > 0) {
       security_queue.emplace(data, topic);
     }

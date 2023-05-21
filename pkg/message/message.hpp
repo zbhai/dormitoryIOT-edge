@@ -21,19 +21,19 @@ class message {
   int m_type;
 
 public:
-  message(const std::string &data, const std::string &topic)
+  message(const std::string &data, const std::string &topic) noexcept 
       : data(data), topic(topic) {}
-  message() {}
+  message() noexcept {}
   
-  message(const message &m) : data(m.data), topic(m.topic) {}
-  message &operator=(const message &m) {
+  message(const message &m) noexcept : data(m.data), topic(m.topic) {}
+  message &operator=(const message &m) noexcept {
     data = m.data;
     topic = m.topic;
     return *this;
   }
   
-  message(message &&m) : data(std::move(m.data)), topic(std::move(m.topic)) {}
-  message &operator=(message &&m) {
+  message(message &&m) noexcept : data(std::move(m.data)), topic(std::move(m.topic))  {}
+  message &operator=(message &&m) noexcept {
     data = std::move(m.data);
     topic = std::move(m.topic);
     return *this;
@@ -42,22 +42,6 @@ public:
   std::string get_topic() const { return topic; }
 };
 
-class message_queue {
-  std::list<message> messages;
-  int length;
-  int max_size;
 
-  pthread_mutex_t mutex;
-
-public:
-  message_queue(int max_size) :  length(0), max_size(max_size) {
-    pthread_mutex_init(&mutex, NULL);
-  }
-  ~message_queue() { pthread_mutex_destroy(&mutex); }
-  int push(std::string &data, std::string &topic);
-  message pop();
-  bool empty() { return (length != 0); }
-  int size() { return length; }
-};
 
 #endif // __MESSAGE_HPP__
