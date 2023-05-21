@@ -22,8 +22,10 @@
 #include <string>
 #include <thread>
 
-#include "dormitory.hpp"
-#include "mqtt.hpp"
+#include "pkg/message/dormitory.hpp"
+#include "pkg/message/message.hpp"
+#include "pkg/message/mqtt.hpp"
+#include "pkg/message/threadpool.hpp"
 
 using namespace std;
 
@@ -35,9 +37,10 @@ extern void *mqtt_thread(void *arg);
 void dormitory_setup(void) {
 
   auto dormitory = dormitoryIOT::GetInstance();
+  spdlog::debug("{}", static_cast<void *>(dormitory));
 
   // create systems belong to the region
-  lighting lighting_led("led", "led_id", true);
+  lighting lighting_led("lighting", "lighting", true);
   security security_smoke("smoke", "smoke_id", true);
   // create the devices belong to this systems
   led led1("led1", "led1_id", "off", 0);
@@ -52,11 +55,11 @@ void dormitory_setup(void) {
   // add the systems to the region
   dormitory->add_system(&lighting_led);
   dormitory->add_system(&security_smoke);
-  dormitory->set_security_system(&security_smoke);
+  dormitory->update_security_system(&security_smoke);
 
   // set the lighting system groups
   auto devices = list<device *>{&led1};
-  lighting_led.add_group("dormitory", devices);
+  lighting_led.add_group("lighting", devices);
 }
 
 // the thread create a reagion and handle the message from the reagion
@@ -67,11 +70,31 @@ int main(int argc, char *argv[]) {
   spdlog::set_pattern("[%Y-%m-%d %H:%M:%S.%e] [thread %t] [%l] %v");
 
   // create the region
-  dormitory_setup();
 
-  // get the region
+  // create systems belong to the region
   auto dormitory = dormitoryIOT::GetInstance();
+  spdlog::debug("{}", static_cast<void *>(dormitory));
+  lighting lighting_led("lighting", "lighting", true);
+  security security_smoke("smoke", "smoke_id", true);
+  // create the devices belong to this systems
+  led led1("led1", "led1_id", "off", 0);
+  dth11 dth11_1("dth11_1", "dth11_1_id", 0, 0);
+  mq2 mq2_1("mq2_1", "mq2_1_id", 0, "o");
 
+  // add the devices to the systems
+  lighting_led.add_device(&led1);
+  security_smoke.add_device(&dth11_1);
+  security_smoke.add_device(&mq2_1);
+
+  // add the systems to the region
+  dormitory->add_system(&lighting_led);
+  dormitory->add_system(&security_smoke);
+  dormitory->update_security_system(&security_smoke);
+
+  // set the lighting system groups
+  auto devices = list<device *>{&led1};
+  lighting_led.add_group("dormitory1", devices);
+  
   // create all threads for the region
   dormitory->region_thread(&dormitory);
 
@@ -84,6 +107,6 @@ int main(int argc, char *argv[]) {
 
   while (true) {
     spdlog::debug("main thread is running");
-    usleep(1000000);
+    usleep(10000000);
   }
 }

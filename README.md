@@ -14,3 +14,5 @@ the device is a twin of physical device.
 ## how to design a 
 
 
+mpmcqueue pop函数，需要元素类型具有什么样的操作
+xxx_message_handler()中包含 rigtorp::MPMCQueue类内的pop接口，如果发生错误的话需要注意这里

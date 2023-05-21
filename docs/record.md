@@ -48,3 +48,29 @@ cuier@master:~/github.com/dormitoryIOT-edge$ ./app
 Segmentation fault (core dumped)
 cuier@master:~/github.com/dormitoryIOT-edge$ 
 ```
+
+## system get id is error
+创建子线程, ID: 140534827972160
+thread 140534827972160 waiting...
+[2023-05-09 17:25:06.848] [thread 2156745] [debug] lighting
+[2023-05-09 17:25:06.848] [thread 2156745] [debug] lighting
+[2023-05-09 17:25:06.848] [thread 2156745] [debug] system init location01
+[2023-05-09 17:25:06.848] [thread 2156745] [debug] smoke_id
+[2023-05-09 17:25:06.848] [thread 2156745] [debug] smoke
+[2023-05-09 17:25:06.848] [thread 2156745] [debug] system init location01
+[2023-05-09 17:25:06.848] [thread 2156748] [debug] security_thread start
+[2023-05-09 17:25:06.848] [thread 2156745] [debug] main thread is running
+[2023-05-09 17:25:06.848] [thread 2156749] [debug] control_panel_thread start
+[2023-05-09 17:25:06.848] [thread 2156749] [debug] control_panel_thread location01
+[2023-05-09 17:25:06.848] [thread 2156749] [debug] region get system location00
+[2023-05-09 17:25:06.848] [thread 2156749] [debug] system get id location01
+[2023-05-09 17:25:06.848] [thread 2156749] [debug] system get id location02
+terminate called after throwing an instance of 'std::bad_alloc'
+  what():  std::bad_alloc
+Aborted (core dumped)
+
+并且，调试设置断点后不产生作用
+image.png
+
+- 猜测是由于dormitoryIOT 唯一实例设计因此的错误
+- dormitory_setup()函数创建系统和设备后退出时因为作用域原因导致自动调用析构函数全部删除（ok）
