@@ -43,6 +43,7 @@
 #include "message.hpp"
 #include "mqtt.hpp"
 #include "split.hpp"
+#include "MPMCQueue.h"
 
 const std::string SERVER_ADDRESS("localhost:1883");
 
@@ -55,8 +56,8 @@ const std::string SEN_CLOUD_TOPIC{"SYS/dis/upload_records"};
 const int QOS = 1;
 const int N_RETRY_ATTEMPTS = 5;
 
-extern message_queue lighting_queue;
-extern message_queue security_queue;
+rigtorp::MPMCQueue<message> lighting_queue(MAX_LIGHTING_QUEUE_SIZE);
+rigtorp::MPMCQueue<message> security_queue(MAX_SECURITY_QUEUE_SIZE);
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -174,11 +175,11 @@ class callback : public virtual mqtt::callback,
     std::string device = topic_elem[4];
     int index = device.find("lighting");
     if (index > 0) {
-      lighting_queue.push(data, topic);
+      lighting_queue.try_emplace(data, topic);
     }
     index = device.find("security");
     if (index > 0) {
-      security_queue.push(data, topic);
+      security_queue.emplace(data, topic);
     }
   }
 

@@ -1,9 +1,10 @@
 #include "dormitory.hpp"
 #include "message.hpp"
+#include "MPMCQueue.h"
 
 // creating the global message queue
-message_queue lighting_queue(50);
-message_queue security_queue(10);
+rigtorp::MPMCQueue<message> lighting_queue(MAX_LIGHTING_QUEUE_SIZE);
+rigtorp::MPMCQueue<message> security_queue(MAX_SECURITY_QUEUE_SIZE);
 
 /* implement the device method */
 std::string device::get_name(){
@@ -226,13 +227,16 @@ void mq2::get_desired_alarm_status(std::string desired_alarm_status) {
 
 /* implement the security method */
 void security_message_handler(void *arg) {
-  message_queue &m_queue = *(message_queue *)arg;
+  rigtorp::MPMCQueue<message> &m_queue =
+      *(rigtorp::MPMCQueue<message> *)arg;
+
+  message pm;
 
   while (true) {
     if (!m_queue.empty()) {
-      message m = m_queue.pop();
-      if (m.get_topic() == "security") {
-        spdlog::debug("security message: {}", m.get_data());
+      m_queue.pop(pm);
+      if (pm.get_topic() == "security") {
+        spdlog::debug("security message: {}", pm.get_data());
       }
     }
     usleep(1000);
@@ -266,17 +270,19 @@ void security::control_panel(void *arg) {
 
 /* implement the lighting method */
 void lighting_message_handler(void *arg) {
-  message_queue &m_queue = *(message_queue *)arg;
+  auto m_queue = (rigtorp::MPMCQueue<message> *) arg;
+
+  message pm;
 
   while (true) {
-    if (!m_queue.empty()) {
-      message m = m_queue.pop();
-      if (m.get_topic() == "lighting") {
-        spdlog::debug("lighting message branch1: {}", m.get_data());
+    if (!m_queue->empty()) {
+      m_queue->pop(pm);
+      if (pm.get_topic() == "lighting") {
+        spdlog::debug("lighting message branch1: {}", pm.get_data());
       }
-      else if(m.get_topic().find("lighting") != m.get_topic().npos)
+      else if(pm.get_topic().find("lighting") != pm.get_topic().npos)
       {
-        spdlog::debug("lighting message branch2: {}", m.get_data());
+        spdlog::debug("lighting message branch2: {}", pm.get_data());
       }
     }
     usleep(1000);

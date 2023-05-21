@@ -10,6 +10,12 @@
 #include "mqtt.hpp"
 #include "threadpool.hpp"
 
+
+
+#define MAX_GENERAL_QUEUE_SIZE (100)
+#define MAX_LIGHTING_QUEUE_SIZE MAX_GENERAL_QUEUE_SIZE
+#define MAX_SECURITY_QUEUE_SIZE (20)
+
 // define the device message model
 //---------------LED----------------
 // led status: off/on               ; the led status is read and write
