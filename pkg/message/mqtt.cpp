@@ -39,11 +39,18 @@
 #include <string>
 #include <thread>
 
+#include<unistd.h>      //linux用户级
+#include<time.h>
+#include<utime.h>
+
+
 #include "dormitory.hpp"
 #include "message.hpp"
 #include "mqtt.hpp"
 #include "split.hpp"
 #include "MPMCQueue.h"
+
+using namespace std;
 
 const std::string SERVER_ADDRESS("localhost:1883");
 
@@ -58,6 +65,21 @@ const int N_RETRY_ATTEMPTS = 5;
 
 extern rigtorp::MPMCQueue<message> lighting_queue;
 extern rigtorp::MPMCQueue<message> security_queue;
+extern rigtorp::MPMCQueue<message> downstream_queue;
+extern rigtorp::MPMCQueue<message> downstream_security;
+
+const auto TIMEOUT = std::chrono::seconds(10);
+
+
+
+const char* PAYLOAD1 = "Hello World!";
+const char* PAYLOAD2 = "Hi there!";
+const char* PAYLOAD3 = "Is anyone listening?";
+const char* PAYLOAD4 = "Someone is always listening.";
+
+const char* LWT_PAYLOAD = "Last will and testament.";
+
+void *mqtt_pub_thread(void *);
 
 /////////////////////////////////////////////////////////////////////////////
 
@@ -87,6 +109,47 @@ class action_listener : public virtual mqtt::iaction_listener {
 
 public:
   action_listener(const std::string &name) : name_(name) {}
+};
+
+/////////////////////////////////////////////////////////////////////////////
+
+/**
+ * A base action listener.
+ */
+class action_listener_dlv : public virtual mqtt::iaction_listener
+{
+protected:
+	void on_failure(const mqtt::token& tok) override {
+		cout << "\tListener failure for token: "
+			<< tok.get_message_id() << endl;
+	}
+
+	void on_success(const mqtt::token& tok) override {
+		cout << "\tListener success for token: "
+			<< tok.get_message_id() << endl;
+	}
+};
+
+/**
+ * A derived action listener for publish events.
+ */
+class delivery_action_listener : public action_listener_dlv
+{
+	atomic<bool> done_;
+
+	void on_failure(const mqtt::token& tok) override {
+		action_listener_dlv::on_failure(tok);
+		done_ = true;
+	}
+
+	void on_success(const mqtt::token& tok) override {
+		action_listener_dlv::on_success(tok);
+		done_ = true;
+	}
+
+public:
+	delivery_action_listener() : done_(false) {}
+	bool is_done() const { return done_; }
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -136,7 +199,9 @@ class callback : public virtual mqtt::callback,
 
   // (Re)connection success
   // Either this or connected() can be used for callbacks.
-  void on_success(const mqtt::token &tok) override {}
+  void on_success(const mqtt::token &tok) override {
+
+  }
 
   // (Re)connection success
   void connected(const std::string &cause) override {
@@ -207,35 +272,62 @@ void *mqtt_thread(void *arg) {
   // disconnected. In that case, it needs a unique ClientID and a
   // non-clean session.
 
-  mqtt::async_client cli(SERVER_ADDRESS, CLIENT_ID);
+  mqtt::async_client client(SERVER_ADDRESS, CLIENT_ID);
 
   mqtt::connect_options connOpts;
   connOpts.set_clean_session(false);
 
   // Install the callback(s) before connecting.
-  callback cb(cli, connOpts);
-  cli.set_callback(cb);
+  callback cb(client, connOpts);
+  client.set_callback(cb);
 
   // Start the connection.
   // When completed, the callback will subscribe to topic.
 
   try {
     std::cout << "Connecting to the MQTT server..." << std::flush;
-    cli.connect(connOpts, nullptr, cb);
+    mqtt::token_ptr conntok = client.connect(connOpts, nullptr, cb);
+    std::cout << "waiting for the connect complete..." << std::flush;
+    //conntok->wait();
+    cout << "  ...OK" << endl;
   } catch (const mqtt::exception &exc) {
     std::cerr << "\nERROR: Unable to connect to MQTT server: '"
               << SERVER_ADDRESS << "'" << exc << std::endl;
     return nullptr;
   }
 
-  // Just block till user tells us to quit.
-  while (1) {
+    sleep(5);
+
+  while(true)
+  {
+    // loop for the checkout the message queue
+    if(!downstream_security.empty())
+    { 
+      message m;
+      downstream_security.pop(m);
+      spdlog::debug("publish message topic {}, message data{}", m.get_topic(), m.get_data());
+      mqtt::message_ptr pubmsg = mqtt::make_message(m.get_topic(), m.get_data());
+      pubmsg->set_qos(1);
+      client.publish(pubmsg)->wait_for(TIMEOUT);
+      spdlog::debug("publish message success!\n\r");
+    }
+    if(!downstream_queue.empty())
+    {
+      message m;
+      downstream_queue.pop(m);
+      spdlog::debug("publish message topic {}, message data{}", m.get_topic(), m.get_data());
+      mqtt::message_ptr pubmsg = mqtt::make_message(m.get_topic(), m.get_data());
+      pubmsg->set_qos(0);
+      client.publish(pubmsg)->wait_for(TIMEOUT);
+      spdlog::debug("publish message success!\n\r");
+    }
+    sleep(1);
   }
 
   // Disconnect
   try {
     std::cout << "\nDisconnecting from the MQTT server..." << std::flush;
-    cli.disconnect()->wait();
+    client.disconnect()->wait();
     std::cout << "OK" << std::endl;
   } catch (const mqtt::exception &exc) {
     std::cerr << exc << std::endl;
@@ -244,3 +336,4 @@ void *mqtt_thread(void *arg) {
 
   return 0;
 }
+

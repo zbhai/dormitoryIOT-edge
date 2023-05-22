@@ -93,7 +93,7 @@ int main(int argc, char *argv[]) {
 
   // set the lighting system groups
   auto devices = list<device *>{&led1};
-  lighting_led.add_group("dormitory1", devices);
+  lighting_led.add_group("dormitory", devices);
   
   // create all threads for the region
   dormitory->region_thread(&dormitory);

@@ -5,6 +5,8 @@
 // creating the global message queue
 rigtorp::MPMCQueue<message> lighting_queue(MAX_LIGHTING_QUEUE_SIZE);
 rigtorp::MPMCQueue<message> security_queue(MAX_SECURITY_QUEUE_SIZE);
+rigtorp::MPMCQueue<message> downstream_queue(MAX_GENERAL_QUEUE_SIZE);
+rigtorp::MPMCQueue<message> downstream_security(MAX_SECURITY_QUEUE_SIZE);
 
 /* implement the device method */
 std::string device::get_name(){
@@ -136,12 +138,19 @@ std::string led::get_status() {
   return temp;
 }
 extern const std::string SEN_DEVICE_TOPIC{
-    "hw/events/device/+/twin/update/delta"};
+    "hw/events/device/led/twin/update/delta"};
+
 message led::set_desired_status(std::string desired) {
   pthread_rwlock_wrlock(&ledlock);
   desired_status = desired;
   pthread_rwlock_unlock(&ledlock);
-  return message(desired, SEN_DEVICE_TOPIC);
+  message m(desired, SEN_DEVICE_TOPIC);
+  bool ret = downstream_queue.try_push(m);
+  if(!ret)
+  {
+    spdlog::critical("the downstream queue is full!\n\r");
+  }
+  return m;
 }
 bool led::synced() {
   pthread_rwlock_rdlock(&ledlock);

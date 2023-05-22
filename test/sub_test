@@ -1,0 +1,6 @@
+#!/bin/bash
+
+mosquitto_sub -h localhost -t "hw/events/device/+/twin/update/delta" -i "sub_test"
+
+
+
