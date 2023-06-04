@@ -5,6 +5,7 @@
 // creating the global message queue
 rigtorp::MPMCQueue<message> lighting_queue(MAX_LIGHTING_QUEUE_SIZE);
 rigtorp::MPMCQueue<message> security_queue(MAX_SECURITY_QUEUE_SIZE);
+rigtorp::MPMCQueue<message> general_queue(MAX_GENERAL_QUEUE_SIZE);
 rigtorp::MPMCQueue<message> downstream_queue(MAX_GENERAL_QUEUE_SIZE);
 rigtorp::MPMCQueue<message> downstream_security(MAX_SECURITY_QUEUE_SIZE);
 
@@ -357,6 +358,38 @@ void lighting::control_panel(void *arg) {
   }
 }
 
+void general_message_handler(void *arg)
+{
+  auto m_queue = (rigtorp::MPMCQueue<message> *) arg;
+
+  message pm;
+
+  while (true) {
+    if (!m_queue->empty()) {
+      m_queue->pop(pm);
+      spdlog::debug("the message data: {}", pm.get_data());
+    }
+    usleep(1000);
+  }
+}
+
+void general::control_panel(void *arg){
+
+  // get the dormitory
+  auto dormitory = dormitoryIOT::GetInstance();
+  spdlog::debug("{}", static_cast<void *>(dormitory));
+
+  static int task_flag = 0;
+
+  if (!task_flag) {
+    // create a task to handle the message
+    Task Task(lighting_message_handler, &lighting_queue);
+    dormitory->pool.addTask(Task);
+    task_flag = 1;
+  }
+
+}
+
 /* implement the dormitoryIOT method */
 dormitoryIOT *dormitoryIOT::instance =
     new (std::nothrow) dormitoryIOT("dormitory", "dormitory");
@@ -399,13 +432,17 @@ void *control_panel_thread(void *arg) {
   spdlog::debug("{}", static_cast<void *>(dormitory));
   
   while (true) {
-    spdlog::debug("control_panel_thread location01");
     // get the lighting system
     std::string s("lighting");
     systemIOT *lighting = dormitory->get_system(s);
-    spdlog::debug("control_panel_thread location02");
     if (lighting) {
       lighting->control_panel(nullptr);
+    }
+    usleep(1000000);
+    std::string s1("general");
+    systemIOT *general = dormitory->get_system(s);
+    if (general) {
+      general->control_panel(nullptr);
     }
     usleep(1000000);
   }

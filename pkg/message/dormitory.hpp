@@ -230,6 +230,19 @@ private:
   void set_security_status(std::string security_status);
 };
 
+class general : public systemIOT{
+
+  pthread_rwlock_t general_lock;
+
+  public:
+  general(std::string system_name, std::string system_id, bool is_basic_system)
+      : systemIOT(system_name, system_id, is_basic_system) {
+    pthread_rwlock_init(&general_lock, NULL);
+  }
+
+  void control_panel(void *arg);
+};
+
 class dormitoryIOT : public region {
 public:
   ThreadPool pool;

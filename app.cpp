@@ -76,6 +76,7 @@ int main(int argc, char *argv[]) {
   spdlog::debug("{}", static_cast<void *>(dormitory));
   lighting lighting_led("lighting", "lighting", true);
   security security_smoke("smoke", "smoke_id", true);
+  general general_system("general", "general_id", true);
   // create the devices belong to this systems
   led led1("led1", "led1_id", "off", 0);
   dth11 dth11_1("dth11_1", "dth11_1_id", 0, 0);
@@ -89,6 +90,7 @@ int main(int argc, char *argv[]) {
   // add the systems to the region
   dormitory->add_system(&lighting_led);
   dormitory->add_system(&security_smoke);
+  dormitory->add_system(&general_system);
   dormitory->update_security_system(&security_smoke);
 
   // set the lighting system groups

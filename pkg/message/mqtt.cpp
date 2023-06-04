@@ -56,15 +56,17 @@ const std::string SERVER_ADDRESS("localhost:1883");
 
 const std::string CLIENT_ID{"dormitoryIOT"};
 const std::string TOPIC{"dormitoryIOT/test"};
-const std::string REC_DEVICE_TOPIC{"ke/events/device/+/data/update"};
-const std::string SEN_DEVICE_TOPIC{"hw/events/device/+/twin/update/delta"};
-const std::string SEN_CLOUD_TOPIC{"SYS/dis/upload_records"};
+const std::string REC_DEVICE_TOPIC{"$hw/events/device/+/state/update"};
+const std::string REC_DEVICE_TOPIC_THIRDY{"$ke/events/device/+/data/update"};
+const std::string SEN_DEVICE_TOPIC{"$hw/events/device/+/twin/update/delta"};
+const std::string SEN_CLOUD_TOPIC{"$SYS/dis/upload_records"};
 
 const int QOS = 1;
 const int N_RETRY_ATTEMPTS = 5;
 
 extern rigtorp::MPMCQueue<message> lighting_queue;
 extern rigtorp::MPMCQueue<message> security_queue;
+extern rigtorp::MPMCQueue<message> general_queue;
 extern rigtorp::MPMCQueue<message> downstream_queue;
 extern rigtorp::MPMCQueue<message> downstream_security;
 
@@ -213,6 +215,7 @@ class callback : public virtual mqtt::callback,
 
     cli_.subscribe(TOPIC, QOS, nullptr, subListener_);
     cli_.subscribe(REC_DEVICE_TOPIC, QOS, nullptr, subListener_);
+    cli_.subscribe(REC_DEVICE_TOPIC_THIRDY, QOS, nullptr, subListener_);
   }
 
   // Callback for when the connection is lost.
@@ -254,6 +257,44 @@ class callback : public virtual mqtt::callback,
     index = topic.find("security");
     if (index > 0) {
       security_queue.emplace(data, topic);
+    }
+    index = topic.find("node-led-dth11-buzzer");
+    if(index > 0)
+    {
+      bool ret = general_queue.try_emplace(data, topic);
+      if(ret != true)
+      {
+        spdlog::debug("message_arrived general queue try emplace error!\n\r");
+      }
+      else
+      {
+        spdlog::debug("message_arrived general queue try emplace success!\n\r");
+      }
+    }
+    index = topic.find("bh1750");
+    if(index > 0)
+    {
+      bool ret = general_queue.try_emplace(data, topic);
+      if(ret != true)
+      {
+        spdlog::debug("message_arrived general queue try emplace error!\n\r");
+      }
+      else
+      {
+        spdlog::debug("message_arrived general queue try emplace success!\n\r");
+      }
+    }
+    index = topic.find("mq2");
+    {
+      bool ret = general_queue.try_emplace(data, topic);
+      if(ret != true)
+      {
+        spdlog::debug("message_arrived general queue try emplace error!\n\r");
+      }
+      else
+      {
+        spdlog::debug("message_arrived general queue try emplace success!\n\r");
+      }
     }
   }
 
